@@ -114,7 +114,13 @@ object StreamPlayer {
         applySubtitles(player, subtitlesOn)
 
         val source = factory.createMediaSource(item.build())
-        player.setMediaSource(source, startPositionMs.coerceAtLeast(0))
+        if (startPositionMs > 0) {
+            player.setMediaSource(source, startPositionMs)      // resume a replay
+        } else {
+            // Default position: the live point for live channels. Position 0 would be the
+            // oldest moment of the timeshift buffer (several hours back on France TV).
+            player.setMediaSource(source, true)
+        }
         player.prepare()
         player.playWhenReady = true
     }
