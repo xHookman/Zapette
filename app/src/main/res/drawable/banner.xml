@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#FF07080B" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#FF1A1D25" android:pathData="M0,150h320v30h-320z" />
+    <path android:fillColor="#FFFF4B2B"
+        android:pathData="M40,58h52a8,8 0 0 1 8,8v30a8,8 0 0 1 -8,8h-52a8,8 0 0 1 -8,-8v-30a8,8 0 0 1 8,-8z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M69,64 L55,84 h10 l-4,14 l16,-21 h-10 z" />
+    <!-- "zapette" wordmark drawn as simple strokes-free blocks -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M118,70h22v6l-14,16h14v6h-22v-6l14,-16h-14z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M146,98l10,-28h6l10,28h-7l-2,-6h-8l-2,6zM157,86h4l-2,-7z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M176,70h12a8,8 0 0 1 0,16h-6v12h-6zM182,76v4h5a2,2 0 0 0 0,-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M196,70h18v6h-12v5h10v6h-10v5h12v6h-18z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M218,70h20v6h-7v22h-6v-22h-7z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M242,70h20v6h-7v22h-6v-22h-7z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M266,70h18v6h-12v5h10v6h-10v5h12v6h-18z" />
+</vector>

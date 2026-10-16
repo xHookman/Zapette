@@ -1,0 +1,237 @@
+package fr.zapette.tv.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import fr.zapette.tv.BuildConfig
+import fr.zapette.tv.data.SettingCategory
+import fr.zapette.tv.data.SettingEntry
+import fr.zapette.tv.ui.AppViewModel
+import fr.zapette.tv.ui.Choice
+import fr.zapette.tv.ui.TextAsk
+import fr.zapette.tv.ui.components.FocusSurface
+import fr.zapette.tv.ui.components.Spinner
+import fr.zapette.tv.ui.theme.Z
+import fr.zapette.tv.ui.theme.ZType
+import kotlinx.coroutines.launch
+
+/** A settings row, either native to Zapette or coming from the add-on's settings.xml. */
+private sealed interface Row2 {
+    data class Header(val label: String) : Row2
+    data class Item(
+        val label: String,
+        val value: String = "",
+        val toggle: Boolean? = null,
+        val description: String = "",
+        val onClick: () -> Unit,
+    ) : Row2
+}
+
+@Composable
+fun SettingsScreen(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    var schema by remember { mutableStateOf<List<SettingCategory>?>(null) }
+    var category by remember { mutableIntStateOf(0) }
+    var revision by remember { mutableIntStateOf(0) }
+    val countries by vm.countries.collectAsState()
+
+    LaunchedEffect(revision) {
+        schema = runCatching { vm.engine.settingsSchema() }.getOrElse { emptyList() }
+        vm.refreshAddonInfo()
+    }
+    LaunchedEffect(Unit) { vm.backdrop = null }
+
+    fun saveSetting(id: String, value: String) {
+        scope.launch {
+            vm.engine.setSetting(id, value)
+            revision++
+        }
+    }
+
+    val categories = listOf("Zapette") + schema.orEmpty().map { it.label }
+
+    val rows: List<Row2> = if (category == 0) {
+        val country = countries.firstOrNull { it.id == vm.store.liveCountry }?.label ?: vm.store.liveCountry
+        listOf(
+            Row2.Header("Télévision"),
+            Row2.Item("Démarrer sur le direct", toggle = vm.store.startOnLive,
+                description = "À l'ouverture, Zapette reprend la dernière chaîne regardée, comme un téléviseur.") {
+                vm.store.startOnLive = !vm.store.startOnLive; revision++
+            },
+            Row2.Item("Bandeau d'information au zapping", toggle = vm.store.bannerOnZap,
+                description = "Affiche la chaîne et le programme en cours à chaque changement de chaîne.") {
+                vm.store.bannerOnZap = !vm.store.bannerOnZap; revision++
+            },
+            Row2.Item("Chaînes en direct", value = country,
+                description = "Bouquet utilisé pour l'accueil, la liste des chaînes et le guide TV.") {
+                val list = countries
+                if (list.isNotEmpty()) vm.ask(Choice("Chaînes en direct", list.map { it.label },
+                    list.indexOfFirst { it.id == vm.store.liveCountry }) { i -> vm.changeCountry(list[i].id); revision++ })
+            },
+            Row2.Header("Catch-up TV & More"),
+            Row2.Item(
+                "Version de l'extension", value = vm.addonVersion + if (vm.addonFromGitHub) " · GitHub" else " · intégrée",
+                description = "L'extension est mise à jour indépendamment de l'application, directement depuis GitHub.",
+            ) { vm.checkAddonUpdate() },
+            Row2.Item("Rechercher une mise à jour", description = "Télécharge la dernière version publiée sur GitHub.") {
+                vm.checkAddonUpdate()
+            },
+        ) + (if (vm.addonFromGitHub) listOf(
+            Row2.Item("Revenir à la version intégrée", description = "En cas de problème après une mise à jour.") {
+                vm.updateAddon(revert = true)
+            }
+        ) else emptyList()) + listOf(
+            Row2.Item("Vider le cache", description = "Supprime le cache des pages et le guide TV téléchargé.") { vm.clearCache() },
+            Row2.Header("À propos"),
+            Row2.Item("Zapette ${BuildConfig.VERSION_NAME}",
+                description = "Interface TV pour Catch-up TV & More. Les contenus sont fournis par les chaînes ; " +
+                    "certains nécessitent un compte (TF1+, M6+…) à renseigner dans « Comptes ».") {},
+        )
+    } else {
+        val cat = schema?.getOrNull(category - 1)
+        cat?.entries.orEmpty().mapNotNull { e -> addonRow(vm, e, ::saveSetting, onAction = { url -> vm.runAction(url) }) }
+    }
+
+    Row(Modifier.fillMaxSize().padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp)) {
+        Column(Modifier.width(280.dp).fillMaxHeight()) {
+            Text("Réglages", style = ZType.Headline, color = Z.Text)
+            Spacer(Modifier.height(18.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                itemsIndexed(categories) { index, label ->
+                    FocusSurface(
+                        onClick = { category = index }, onFocus = { category = index },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), focusedScale = 1.03f,
+                        container = if (category == index) Z.Surface2 else Color.Transparent,
+                        focusedContainer = Color.White, ring = false,
+                    ) { focused ->
+                        Text(
+                            label, style = ZType.Label.copy(fontSize = 16.sp),
+                            color = if (focused) Color.Black else if (category == index) Z.Text else Z.Muted,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+                        )
+                    }
+                }
+                if (schema == null) item { Spinner(Modifier.padding(16.dp), size = 22.dp) }
+            }
+        }
+        Spacer(Modifier.width(28.dp))
+        LazyColumn(
+            Modifier.weight(1f).fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(top = 56.dp, bottom = 48.dp),
+        ) {
+            items(rows) { row ->
+                when (row) {
+                    is Row2.Header -> Text(
+                        row.label.uppercase(), style = ZType.Small.copy(letterSpacing = 1.4.sp), color = Z.Live,
+                        modifier = Modifier.padding(start = 16.dp, top = 18.dp, bottom = 6.dp),
+                    )
+                    is Row2.Item -> SettingRow(row)
+                }
+            }
+        }
+    }
+}
+
+private fun addonRow(
+    vm: AppViewModel,
+    e: SettingEntry,
+    set: (String, String) -> Unit,
+    onAction: (String) -> Unit,
+): Row2? = when (e.type) {
+    "section" -> Row2.Header(e.label)
+    "bool" -> Row2.Item(e.label, toggle = e.value.equals("true", true)) {
+        set(e.id, if (e.value.equals("true", true)) "false" else "true")
+    }
+    "enum", "labelenum", "select" -> {
+        val current = e.options.firstOrNull { it.value == e.value }?.label ?: e.value
+        Row2.Item(e.label, value = current) {
+            vm.ask(Choice(e.label, e.options.map { it.label }, e.options.indexOfFirst { it.value == e.value }) { i ->
+                set(e.id, e.options[i].value)
+            })
+        }
+    }
+    "text", "number", "slider" -> {
+        val secret = e.hidden || e.id.contains("password", true) || e.id.contains("pass", true)
+        val shown = when {
+            e.value.isBlank() -> "Non renseigné"
+            secret -> "••••••••"
+            else -> e.value
+        }
+        Row2.Item(e.label, value = shown) {
+            vm.askText(TextAsk(e.label, if (secret) "" else e.value, secret) { set(e.id, it) })
+        }
+    }
+    "action" -> Row2.Item(e.label) { onAction(e.action) }
+    else -> null
+}
+
+@Composable
+private fun SettingRow(row: Row2.Item) {
+    FocusSurface(
+        onClick = row.onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+        focusedScale = 1.015f, container = Color.Transparent, focusedContainer = Z.Surface2,
+    ) { focused ->
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(row.label, style = ZType.Label.copy(fontSize = 16.sp), color = Z.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (row.description.isNotBlank() && focused) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(row.description, style = ZType.Body.copy(fontSize = 13.sp), color = Z.Muted)
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            when {
+                row.toggle != null -> Toggle(row.toggle)
+                row.value.isNotBlank() -> Text(
+                    row.value, style = ZType.Label, color = Z.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(260.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Toggle(on: Boolean) {
+    Box(
+        Modifier.size(width = 46.dp, height = 26.dp).clip(RoundedCornerShape(13.dp))
+            .background(if (on) Z.Live else Z.Surface3),
+        contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(Modifier.padding(3.dp).size(20.dp).clip(CircleShape).background(Color.White))
+    }
+}

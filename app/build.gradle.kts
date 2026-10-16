@@ -1,0 +1,170 @@
+import java.io.ByteArrayOutputStream
+import java.net.URI
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.chaquo.python")
+}
+
+android {
+    namespace = "fr.zapette.tv"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "fr.zapette.tv"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
+
+        ndk {
+            // Python (Chaquopy) is native: ship the ABIs of Android TV devices
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    // Release builds: provide a keystore through environment variables,
+    // otherwise the debug key is used so the APK is always installable.
+    val releaseKeystore = System.getenv("ZAPETTE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("ZAPETTE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ZAPETTE_KEY_ALIAS")
+                keyPassword = System.getenv("ZAPETTE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+    lint {
+        // The app is sideloaded on TVs: never block a release build on lint
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        pip {
+            // Same libraries Kodi provides to Catch-up TV & More (script.module.*)
+            install("requests==2.31.0")   // urlquick is not compatible with requests >= 2.32.4
+            install("six")
+            install("pytz")
+            install("tzdata")
+            install("tzlocal")
+            install("future")
+            install("pyqrcode")
+            install("htmlement")
+            install("yt-dlp")
+        }
+    }
+}
+
+dependencies {
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+
+    implementation("androidx.tv:tv-material:1.0.0")
+
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+
+    val media3 = "1.5.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+    implementation("androidx.media3:media3-exoplayer-dash:$media3")
+    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
+
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+}
+
+/*
+ * ./gradlew :app:updateAddons
+ * Downloads the latest Catch-up TV & More and codequick from GitHub and
+ * repackages them (add-on files at the root of the zip) into the assets.
+ */
+tasks.register("updateAddons") {
+    group = "zapette"
+    description = "Refresh the bundled Kodi add-ons from GitHub"
+    doLast {
+        val sources = mapOf(
+            "plugin.video.catchuptvandmore" to
+                "https://github.com/Catch-up-TV-and-More/plugin.video.catchuptvandmore/archive/refs/heads/master.zip",
+            "script.module.codequick" to
+                "https://github.com/willforde/script.module.codequick/archive/refs/heads/master.zip",
+        )
+        val skip = listOf(".git", "resources/screenshots/", "tools/", ".github/", "tests/", "docs/")
+        sources.forEach { (id, url) ->
+            logger.lifecycle("Downloading $id")
+            val bytes = URI(url).toURL().openStream().use { it.readBytes() }
+            val out = ByteArrayOutputStream()
+            ZipOutputStream(out).use { zos ->
+                ZipInputStream(bytes.inputStream()).use { zis ->
+                    var e = zis.nextEntry
+                    while (e != null) {
+                        // "<repo>-master/" (+ "script.module.codequick/" for codequick)
+                        var name = e.name.substringAfter('/')
+                        if (id == "script.module.codequick") {
+                            name = if (name.startsWith("script.module.codequick/")) name.substringAfter('/') else ""
+                        }
+                        if (name.isNotEmpty() && !e.isDirectory && skip.none { name.startsWith(it) }) {
+                            zos.putNextEntry(ZipEntry(name))
+                            zis.copyTo(zos)
+                            zos.closeEntry()
+                        }
+                        e = zis.nextEntry
+                    }
+                }
+            }
+            file("src/main/assets/addons/$id.zip").writeBytes(out.toByteArray())
+        }
+    }
+}
