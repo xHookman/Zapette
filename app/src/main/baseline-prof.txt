@@ -1,0 +1,10 @@
+# Baseline profile: code compiled ahead of time at install (no JIT warm-up stutter
+# on the first screens). Compose, Media3 and the other libraries ship their own.
+HSPLfr/zapette/tv/**->**(**)**
+Lfr/zapette/tv/**;
+HSPLcoil/**->**(**)**
+Lcoil/**;
+HSPLkotlinx/serialization/json/**->**(**)**
+Lkotlinx/serialization/json/**;
+HSPLcom/chaquo/python/**->**(**)**
+Lcom/chaquo/python/**;

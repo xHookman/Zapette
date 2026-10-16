@@ -33,6 +33,9 @@ object StreamPlayer {
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
+                    // A 720p TV must not decode 1080p (weak TV chips struggle)
+                    .setViewportSizeToPhysicalDisplaySize(context, true)
+                    .apply { if (fr.zapette.tv.Perf.lite) setMaxVideoSize(1280, 720) }
                     .setPreferredAudioLanguage("fr")
                     .setPreferredTextLanguage("fr")
                     .setSelectUndeterminedTextLanguage(true)

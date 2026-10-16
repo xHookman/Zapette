@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +61,8 @@ private val MiniTop = 88.dp
  */
 @Composable
 fun LiveVideoLayer(vm: AppViewModel, fullscreen: Boolean) {
+    val mini = !fullscreen && vm.miniLive
+    SideEffect { FocusTracker.enabled = mini }
     val player = vm.currentLivePlayer() ?: return
     if (!fullscreen && !vm.miniLive) return
 

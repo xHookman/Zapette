@@ -55,6 +55,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import fr.zapette.tv.Perf
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
 import kotlinx.coroutines.delay
@@ -65,6 +66,9 @@ import java.util.Locale
 /** Where the focused element is on screen (the mini-player moves out of its way). */
 object FocusTracker {
     var rect by mutableStateOf<Rect?>(null)
+
+    /** On only while the mini-player is shown: tracking positions costs work at every scroll frame. */
+    var enabled by mutableStateOf(false)
 }
 
 /**
@@ -90,15 +94,19 @@ fun FocusSurface(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier
-            .onGloballyPositioned {
-                coordinates[0] = it
-                if (focused) FocusTracker.rect = it.boundsInWindow()
-            }
+            .then(
+                if (FocusTracker.enabled) Modifier.onGloballyPositioned {
+                    coordinates[0] = it
+                    if (focused) FocusTracker.rect = it.boundsInWindow()
+                } else Modifier
+            )
             .onFocusChanged {
                 if (it.isFocused != focused) {
                     focused = it.isFocused
                     if (it.isFocused) {
-                        coordinates[0]?.takeIf { c -> c.isAttached }?.let { c -> FocusTracker.rect = c.boundsInWindow() }
+                        if (FocusTracker.enabled) {
+                            coordinates[0]?.takeIf { c -> c.isAttached }?.let { c -> FocusTracker.rect = c.boundsInWindow() }
+                        }
                         onFocus?.invoke()
                     }
                 }
@@ -165,8 +173,10 @@ fun ZImage(
 ) {
     Box(modifier.background(placeholder)) {
         if (!url.isNullOrBlank()) {
+            val context = LocalContext.current
+            val request = remember(url) { ImageRequest.Builder(context).data(url).crossfade(!Perf.lite).build() }
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
+                model = request,
                 contentDescription = null,
                 contentScale = contentScale,
                 alpha = alpha,
@@ -194,11 +204,12 @@ fun ChannelLogo(url: String, modifier: Modifier = Modifier, size: Dp = 56.dp, ba
 
 @Composable
 fun LiveBadge(modifier: Modifier = Modifier, text: String = "EN DIRECT") {
-    val transition = rememberInfiniteTransition(label = "live")
-    val dot by transition.animateFloat(
-        initialValue = 1f, targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse), label = "dot",
-    )
+    // A slow blink (one change per second) instead of a 60 fps animation
+    var on by remember { mutableStateOf(true) }
+    if (!Perf.lite) LaunchedEffect(Unit) {
+        while (true) { delay(900); on = !on }
+    }
+    val dot = if (on) 1f else 0.35f
     Row(
         modifier.clip(RoundedCornerShape(6.dp)).background(Z.Live).padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,

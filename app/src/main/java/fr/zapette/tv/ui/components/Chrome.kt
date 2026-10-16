@@ -94,10 +94,12 @@ fun TopBar(vm: AppViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Tab.entries.filter { it != Tab.Settings }.forEach { tab ->
-                TabPill(tab.label, selected = vm.tab == tab, requester = requesters.getValue(tab)) { vm.selectTab(tab) }
+                TabPill(tab.label, selected = vm.tab == tab, requester = requesters.getValue(tab),
+                    onFocus = { vm.previewTab(tab) }) { vm.selectTab(tab) }
             }
             Spacer(Modifier.width(18.dp))
-            TabPill(null, selected = vm.tab == Tab.Settings, requester = requesters.getValue(Tab.Settings)) {
+            TabPill(null, selected = vm.tab == Tab.Settings, requester = requesters.getValue(Tab.Settings),
+                onFocus = { vm.previewTab(Tab.Settings) }) {
                 vm.selectTab(Tab.Settings)
             }
         }
@@ -131,10 +133,16 @@ fun TopBar(vm: AppViewModel) {
 }
 
 @Composable
-private fun TabPill(label: String?, selected: Boolean, requester: FocusRequester, onSelect: () -> Unit) {
+private fun TabPill(
+    label: String?,
+    selected: Boolean,
+    requester: FocusRequester,
+    onFocus: () -> Unit,
+    onSelect: () -> Unit,
+) {
     FocusSurface(
         onClick = onSelect,
-        onFocus = onSelect,  // like Google TV: focusing a tab shows it
+        onFocus = onFocus,  // like Google TV: resting on a tab shows it
         modifier = Modifier.height(40.dp).focusRequester(requester),
         shape = RoundedCornerShape(20.dp),
         focusedScale = 1.04f,

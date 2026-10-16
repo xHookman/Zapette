@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fr.zapette.tv.BuildConfig
+import fr.zapette.tv.Perf
 import fr.zapette.tv.ZapetteApplication
 import fr.zapette.tv.engine.AppUpdater
 import fr.zapette.tv.data.Channel
@@ -157,7 +158,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var guideFocusId: String? = null
 
     /** Backdrop image of the browsing screens (Google TV style ambient art). */
-    var backdrop by mutableStateOf<String?>(null)
+    private var backdropState by mutableStateOf<String?>(null)
+    private var backdropJob: Job? = null
+
+    /**
+     * Ambient artwork of the focused item. Applied only once the focus rests on an
+     * item (not at every D-pad step): loading big pictures while scrolling is what
+     * makes weak TVs stutter. Disabled in light mode.
+     */
+    var backdrop: String?
+        get() = backdropState
+        set(value) {
+            backdropJob?.cancel()
+            if (Perf.lite || value == null) {
+                backdropState = null
+                return
+            }
+            if (value == backdropState) return
+            backdropJob = viewModelScope.launch {
+                delay(400)
+                backdropState = value
+            }
+        }
 
     var hero by mutableStateOf<Hero?>(null)
 
@@ -304,7 +326,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             while (true) {
                 _now.value = nowSec()
-                delay(15_000)
+                // Once a minute, on the minute: progress bars and "reste x min" stay exact
+                // while screens are recomposed 4x less often than before
+                delay(60_000L - System.currentTimeMillis() % 60_000L + 50)
             }
         }
         start()
@@ -427,7 +451,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------- actions
     fun selectTab(t: Tab) {
+        tabJob?.cancel()
         tab = t
+    }
+
+    private var tabJob: Job? = null
+
+    /** Focus moving over the tabs: only show the tab the focus stops on. */
+    fun previewTab(t: Tab) {
+        tabJob?.cancel()
+        if (t == tab) return
+        tabJob = viewModelScope.launch {
+            delay(if (Perf.lite) 350 else 220)
+            tab = t
+        }
     }
 
     fun watch(channel: Channel) {

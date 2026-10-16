@@ -95,7 +95,7 @@ fun GuideScreen(vm: AppViewModel) {
                 contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(channels, key = { it.id }) { c ->
+                items(channels, key = { it.id }, contentType = { "channel" }) { c ->
                     GuideChannelRow(
                         c, vm.nowPlaying(c, now), selected = c.id == selectedId,
                         onClick = { vm.watch(c) },
@@ -128,7 +128,7 @@ fun GuideScreen(vm: AppViewModel) {
                         contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        items(programmes, key = { it.start }) { p ->
+                        items(programmes, key = { it.start }, contentType = { "programme" }) { p ->
                             ProgrammeRow(p, now, onClick = {
                                 when {
                                     p.isOnAt(AppViewModel.nowSec()) -> vm.watch(selected)

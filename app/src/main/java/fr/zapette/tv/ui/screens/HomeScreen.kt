@@ -1,9 +1,5 @@
 package fr.zapette.tv.ui.screens
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,7 +104,7 @@ fun HomeScreen(vm: AppViewModel) {
                         contentPadding = RowPadding,
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        items(channels, key = { it.id }) { c ->
+                        items(channels, key = { it.id }, contentType = { "live" }) { c ->
                             val key = "live:${c.id}"
                             LiveCard(
                                 channel = c, programme = epg[c.xmltvId]?.firstOrNull { it.isOnAt(now) }, now = now,
@@ -126,7 +122,7 @@ fun HomeScreen(vm: AppViewModel) {
                 Column {
                     SectionTitle("Reprendre la lecture")
                     LazyRow(state = vm.rowState("resume"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        items(resume, key = { it.url }) { e ->
+                        items(resume, key = { it.url }, contentType = { "resume" }) { e ->
                             val key = "resume:${e.url}"
                             ResumeCard(
                                 e, CardWidth,
@@ -149,7 +145,7 @@ fun HomeScreen(vm: AppViewModel) {
                 Column {
                     SectionTitle("Ce soir à la télé")
                     LazyRow(state = vm.rowState("tonight"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        items(tonight, key = { it.first.id }) { (c, p) ->
+                        items(tonight, key = { it.first.id }, contentType = { "tonight" }) { (c, p) ->
                             val key = "tonight:${c.id}"
                             TonightCard(
                                 c, p, CardWidth,
@@ -175,7 +171,7 @@ fun HomeScreen(vm: AppViewModel) {
                 Column {
                     SectionTitle("Replay", trailing = "toutes les chaînes")
                     LazyRow(state = vm.rowState("replay"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        items(replay.items, key = { it.url }) { item ->
+                        items(replay.items, key = { it.url }, contentType = { "logo" }) { item ->
                             val key = "replay:${item.url}"
                             LogoTile(
                                 item, 196.dp,
@@ -200,7 +196,8 @@ fun HomeScreen(vm: AppViewModel) {
 @Composable
 fun HeroPanel(hero: Hero?) {
     Box(Modifier.fillMaxWidth().height(196.dp).padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp)) {
-        AnimatedContent(targetState = hero, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "hero") { h ->
+        // No cross-fade here: the text changes at every D-pad step
+        hero.let { h ->
             if (h != null) {
                 Column(Modifier.widthIn(max = 620.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -133,7 +133,7 @@ fun BrowseScreen(vm: AppViewModel, state: BrowseState, embedded: Boolean) {
                     verticalArrangement = Arrangement.spacedBy(22.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    itemsIndexed(items, key = { i, it -> "$i|${it.url}" }) { index, item ->
+                    itemsIndexed(items, key = { i, it -> "$i|${it.url}" }, contentType = { _, _ -> "card" }) { index, item ->
                         MediaCard(
                             item = item,
                             onClick = { vm.open(item, state.title) },

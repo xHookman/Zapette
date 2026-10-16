@@ -52,7 +52,7 @@ fun LiveScreen(vm: AppViewModel) {
             verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            items(channels, key = { it.id }) { c ->
+            items(channels, key = { it.id }, contentType = { "channel" }) { c ->
                 ChannelTile(
                     channel = c,
                     programme = epg[c.xmltvId]?.firstOrNull { it.isOnAt(now) },

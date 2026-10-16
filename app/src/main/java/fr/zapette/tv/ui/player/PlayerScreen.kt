@@ -809,7 +809,7 @@ private fun ZapList(vm: AppViewModel, channels: List<Channel>, tunedId: String?,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            items(channels, key = { it.id }) { c ->
+            items(channels, key = { it.id }, contentType = { "channel" }) { c ->
                 val p = vm.nowPlaying(c, now)
                 FocusSurface(
                     onClick = { onPick(c) },

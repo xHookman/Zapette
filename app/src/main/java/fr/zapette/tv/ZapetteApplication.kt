@@ -19,12 +19,15 @@ class ZapetteApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         engine = AddonEngine(this)
         store = Store(this)
+        Perf.init(this, store.perfMode)
     }
 
     /** Channel logos and programme pictures are reused a lot: cache them generously. */
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
-        .crossfade(180)
-        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.20).build() }
+        .crossfade(if (Perf.lite) 0 else 160)
+        // Light mode: 16-bit bitmaps take half the memory, invisible on pictures
+        .allowRgb565(Perf.lite)
+        .memoryCache { MemoryCache.Builder(this).maxSizePercent(if (Perf.lite) 0.15 else 0.25).build() }
         .diskCache {
             DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(150L * 1024 * 1024).build()
         }

@@ -6,11 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawWithContent
+import fr.zapette.tv.Perf
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,6 +73,16 @@ class MainActivity : ComponentActivity() {
                 ZapetteRoot(vm, onExit = { finish() })
             }
         }
+    }
+}
+
+/** Fades between two screens, or switches instantly in light mode (one screen composed at a time). */
+@Composable
+fun <T> Switch(target: T, label: String, content: @Composable (T) -> Unit) {
+    if (Perf.lite) {
+        key(target) { content(target) }
+    } else {
+        Crossfade(targetState = target, animationSpec = tween(180), label = label) { content(it) }
     }
 }
 
@@ -142,7 +151,7 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
             Column(Modifier.fillMaxSize()) {
                 TopBar(vm)
                 Box(Modifier.fillMaxSize()) {
-                    Crossfade(targetState = vm.tab, label = "tab") { tab ->
+                    Switch(vm.tab, label = "tab") { tab ->
                         when (tab) {
                             Tab.Home -> HomeScreen(vm)
                             Tab.Live -> LiveScreen(vm)
@@ -155,11 +164,7 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
                 }
             }
         }
-        AnimatedContent(
-            targetState = top,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "route",
-        ) { route ->
+        Switch(top, label = "route") { route ->
             when (route) {
                 is Route.Browse -> Box(Modifier.fillMaxSize().background(Z.Bg)) {
                     Backdrop(vm.backdrop)
@@ -197,29 +202,24 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
     }
 }
 
+private val BackdropFadeH = Brush.horizontalGradient(0.25f to Z.Bg, 0.6f to Z.Bg.copy(alpha = 0.6f), 1f to Color.Transparent)
+private val BackdropFadeV = Brush.verticalGradient(0.35f to Color.Transparent, 0.75f to Z.Bg)
+
 /** Ambient artwork on the right side of the screen, faded into the background. */
 @Composable
 fun Backdrop(url: String?) {
-    Crossfade(targetState = url, label = "backdrop") { u ->
-        if (u != null) {
-            Box(Modifier.fillMaxSize()) {
-                ZImage(
-                    u, Modifier.fillMaxWidth(0.7f).fillMaxHeight(0.75f).align(Alignment.TopEnd),
-                    contentScale = ContentScale.Crop, placeholder = Color.Transparent, alpha = 0.55f,
-                )
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.horizontalGradient(
-                            0.25f to Z.Bg, 0.6f to Z.Bg.copy(alpha = 0.6f), 1f to Color.Transparent
-                        )
-                    )
-                )
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(0.35f to Color.Transparent, 0.75f to Z.Bg)
-                    )
-                )
-            }
+    if (url == null || Perf.lite) return
+    Box(
+        Modifier.fillMaxSize().drawWithContent {
+            drawContent()
+            drawRect(BackdropFadeH)
+            drawRect(BackdropFadeV)
         }
+    ) {
+        // Coil cross-fades between pictures: no second animation layer needed
+        ZImage(
+            url, Modifier.fillMaxWidth(0.7f).fillMaxHeight(0.75f).align(Alignment.TopEnd),
+            contentScale = ContentScale.Crop, placeholder = Color.Transparent, alpha = 0.55f,
+        )
     }
 }

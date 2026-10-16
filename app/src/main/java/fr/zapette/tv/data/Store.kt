@@ -38,6 +38,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("mini_on_back", true)
         set(value) = prefs.edit().putBoolean("mini_on_back", value).apply()
 
+    /** Light mode for weak TVs: auto | on | off (applied at next start). */
+    var perfMode: String
+        get() = prefs.getString("perf_mode", "auto") ?: "auto"
+        set(value) = prefs.edit().putString("perf_mode", value).apply()
+
     // ------------------------------------------------------------- resume
     private val _resume = MutableStateFlow(loadResume())
     val resume: StateFlow<List<ResumeEntry>> = _resume.asStateFlow()

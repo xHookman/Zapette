@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import fr.zapette.tv.BuildConfig
+import fr.zapette.tv.Perf
 import fr.zapette.tv.data.SettingCategory
 import fr.zapette.tv.data.SettingEntry
 import fr.zapette.tv.ui.AppViewModel
@@ -147,6 +148,24 @@ fun SettingsScreen(vm: AppViewModel) {
                 val list = countries
                 if (list.isNotEmpty()) vm.ask(Choice("Chaînes en direct", list.map { it.label },
                     list.indexOfFirst { it.id == vm.store.liveCountry }) { i -> vm.changeCountry(list[i].id); revision++ })
+            },
+            Row2.Item(
+                "Mode léger (TV peu puissante)",
+                value = when (vm.store.perfMode) {
+                    "on" -> "Toujours"
+                    "off" -> "Jamais"
+                    else -> "Automatique · " + if (Perf.detectedWeak) "activé" else "désactivé"
+                },
+                description = "Moins d'animations, pas d'images d'ambiance, images plus légères, vidéo limitée à 720p. " +
+                    "Pris en compte au prochain démarrage de Zapette.",
+            ) {
+                val modes = listOf("auto", "on", "off")
+                vm.ask(Choice("Mode léger", listOf("Automatique (recommandé)", "Toujours", "Jamais"),
+                    modes.indexOf(vm.store.perfMode)) { i ->
+                    vm.store.perfMode = modes[i]
+                    revision++
+                    vm.toast("Mode léger", "Redémarrez Zapette pour l'appliquer.")
+                })
             },
             Row2.Header("Lecture"),
             Row2.Item("Sous-titres", toggle = vm.subtitlesOn,
