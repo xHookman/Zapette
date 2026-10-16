@@ -361,7 +361,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Downloads today's and tomorrow's guide, then refreshes it regularly. */
     /**
      * Loads today's guide, then tomorrow's a bit later. The guide files are daily,
      * so they are only parsed again when the date changes: parsing runs in Python
@@ -388,8 +387,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 delay(10 * 60_000L)
             }
-        }
-    }
         }
     }
 
