@@ -285,6 +285,8 @@ def init(home_dir, language="fr_fr", timezone="Europe/Paris", host=None):
         if not os.path.isdir(folder):
             os.makedirs(folder)
     _setup_paths()
+    from zapette_kodi import patches
+    patches.install()
     for key, value in _SILENT_DEFAULTS.items():
         stored = addoninfo._load(runtime.ADDON_ID)
         if key not in stored:

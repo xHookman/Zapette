@@ -99,7 +99,9 @@ import fr.zapette.tv.ui.components.Spinner
 import fr.zapette.tv.ui.components.ZImage
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -143,6 +145,10 @@ private class PlayerJobs {
 /** Actions the player listener needs but which are declared later in the composable. */
 private class PlayerActions {
     var retry: () -> Unit = {}
+    var redetect: () -> Unit = {}
+    /** Last stream sent to the player, and whether its format was already re-checked. */
+    var stream: Stream? = null
+    var redetected = false
 }
 
 @Composable
@@ -182,6 +188,8 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                 exo.seekToDefaultPosition(); exo.prepare(); return
             }
+            // The add-on announced the wrong format: check what the URL really returns
+            if (!actions.redetected && error.errorCode in MANIFEST_ERRORS) { actions.redetect(); return }
             // A live stream may drop: retry once silently
             if (isLive && ui.attempts == 0 && error.errorCode in NETWORK_ERRORS) { actions.retry(); return }
             ui.loading = false
@@ -207,7 +215,9 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
         SelectedItem(c.label, c.url, mapOf("thumb" to c.logo, "fanart" to c.fanart), mapOf("title" to c.label, "plot" to "")),
     )
 
-    fun play(stream: Stream, startMs: Long = 0) {
+    fun play(stream: Stream, startMs: Long = 0, redetected: Boolean = false) {
+        actions.stream = stream
+        actions.redetected = redetected
         ui.error = null
         ui.loading = true
         StreamPlayer.load(context, exo, stream, startMs, vm.subtitlesOn)
@@ -348,6 +358,28 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
         }
     }
     actions.retry = { retry() }
+    actions.redetect = {
+        val s = actions.stream
+        actions.redetected = true
+        if (s != null) scope.launch {
+            val found = withContext(Dispatchers.IO) { runCatching { StreamPlayer.sniff(s) }.getOrNull() }
+            when {
+                found?.manifest != null && found.manifest != s.manifest -> play(s.copy(manifest = found.manifest), redetected = true)
+                else -> {
+                    ui.loading = false
+                    ui.error = buildString {
+                        append("Le flux envoyé par la chaîne n'est pas lisible")
+                        if (found != null && found.manifest == null) {
+                            append(" (réponse HTTP ${found.httpCode})")
+                            if (found.body.isNotBlank()) append(" :\n« ${redact(found.body)} »")
+                        } else {
+                            append(" (format ${s.manifest.uppercase()} non pris en charge).")
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // ------------------------------------------------------------- start
     LaunchedEffect(Unit) {
@@ -607,6 +639,18 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
         }
     }
 }
+
+private val MANIFEST_ERRORS = setOf(
+    PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+    PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+)
+
+/** Masks tokens that a channel may echo in an error answer. */
+private fun redact(text: String) = text.replace(
+    Regex("((?:token|password|signature|authorization)\"?\\s*[=:]\\s*\"?)[^\"&\\s,}]+", RegexOption.IGNORE_CASE), "$1***",
+)
 
 private val NETWORK_ERRORS = setOf(
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,

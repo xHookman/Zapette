@@ -90,7 +90,7 @@ Avec l'application *Downloader* (ou *Send Files to TV*), ou en ADB :
 | Menu | audio & sous-titres | audio & sous-titres |
 | Sous-titres | active / désactive les sous-titres | active / désactive les sous-titres |
 | Retour | ferme le panneau ouvert, puis quitte le plein écran : la chaîne continue dans le mini-lecteur en haut à droite | quitte (la position est mémorisée) |
-| Lecture (menus) | revient en plein écran sur la chaîne du mini-lecteur | — |
+| Lecture (menus) | revient en plein écran sur la chaîne du mini-lecteur (aussi : bouton « ▶ chaîne » en haut, appui long pour le fermer) | — |
 | OK long (menus) | — | menu contextuel de l'extension (favoris, masquer…) |
 
 ## Limites à connaître

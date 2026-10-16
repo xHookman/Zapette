@@ -31,6 +31,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +102,30 @@ fun TopBar(vm: AppViewModel) {
             }
         }
         Spacer(Modifier.weight(1f))
+        if (vm.miniLive) {
+            vm.channel(vm.liveChannelId)?.let { c ->
+                FocusSurface(
+                    onClick = { vm.expandMini() },
+                    onLongClick = { vm.stopLive() },
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    focusedScale = 1.04f,
+                    container = Z.LiveSoft,
+                    focusedContainer = Z.Live,
+                    ring = false,
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 14.dp).align(Alignment.Center),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("${c.number}  ${c.label}", style = ZType.Label, color = Color.White, maxLines = 1)
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+            }
+        }
         Clock()
     }
 }

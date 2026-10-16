@@ -125,6 +125,50 @@ object StreamPlayer {
         player.playWhenReady = true
     }
 
+    /** What the stream URL really returns: its manifest type, or the start of the answer. */
+    data class Sniff(val manifest: String?, val httpCode: Int, val body: String)
+
+    /**
+     * Downloads the beginning of the stream URL to find its real format, when the
+     * format announced by the add-on turns out to be wrong. Blocking: call off the main thread.
+     */
+    fun sniff(stream: Stream): Sniff {
+        var url = stream.url
+        repeat(5) {
+            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                instanceFollowRedirects = false
+                var ua = DEFAULT_UA
+                stream.headers.forEach { (k, v) -> if (k.equals("User-Agent", true)) ua = v else setRequestProperty(k, v) }
+                setRequestProperty("User-Agent", ua)
+            }
+            try {
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    url = java.net.URL(java.net.URL(url), conn.getHeaderField("Location") ?: return Sniff(null, code, "")).toString()
+                    return@repeat
+                }
+                val input = if (code in 200..299) conn.inputStream else conn.errorStream
+                val head = input?.use { s ->
+                    val buf = ByteArray(4096)
+                    val n = s.read(buf).coerceAtLeast(0)
+                    String(buf, 0, n, Charsets.UTF_8)
+                }.orEmpty()
+                val manifest = when {
+                    head.trimStart().startsWith("#EXTM3U") -> "hls"
+                    head.contains("<MPD", ignoreCase = true) -> "dash"
+                    head.contains("<SmoothStreamingMedia", ignoreCase = true) -> "ss"
+                    else -> null
+                }
+                return Sniff(manifest, code, head.replace(Regex("\\s+"), " ").trim().take(200))
+            } finally {
+                conn.disconnect()
+            }
+        }
+        return Sniff(null, 0, "")
+    }
+
     /** Shows or hides subtitles (French first) on a player, at any time. */
     fun applySubtitles(player: ExoPlayer, on: Boolean) {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
