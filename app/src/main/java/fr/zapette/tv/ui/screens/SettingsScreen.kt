@@ -77,8 +77,38 @@ fun SettingsScreen(vm: AppViewModel) {
     fun saveSetting(id: String, value: String) {
         scope.launch {
             vm.engine.setSetting(id, value)
+            if (id == "active_subtitle") vm.syncSubtitles(value)
             revision++
         }
+    }
+
+    /** Copies the login and password of one service to the services the user picks. */
+    fun copyAccount(accounts: List<Account>) {
+        val filled = accounts.filter { it.login.value.isNotBlank() }
+        if (filled.isEmpty()) {
+            vm.toast("Aucun compte à copier", "Renseignez d'abord l'identifiant et le mot de passe d'une chaîne.")
+            return
+        }
+        vm.ask(Choice("Copier le compte de…", filled.map { "${it.name}  ·  ${it.login.value}" }) { i ->
+            val source = filled[i]
+            val targets = accounts.filter { it !== source }
+            vm.ask(Choice(
+                "Copier « ${source.login.value} » vers…",
+                targets.map { t -> t.name + if (t.login.value.isNotBlank()) "  ·  remplace ${t.login.value}" else "" },
+                multi = true,
+                onMulti = { picked ->
+                    val chosen = picked.mapNotNull { targets.getOrNull(it) }
+                    if (chosen.isNotEmpty()) scope.launch {
+                        chosen.forEach { t ->
+                            vm.engine.setSetting(t.login.id, source.login.value)
+                            vm.engine.setSetting(t.password.id, source.password.value)
+                        }
+                        vm.toast("Compte copié", "${source.name} → " + chosen.joinToString(", ") { it.name })
+                        revision++
+                    }
+                },
+            ))
+        })
     }
 
     val categories = listOf("Zapette") + schema.orEmpty().map { it.label }
@@ -95,11 +125,22 @@ fun SettingsScreen(vm: AppViewModel) {
                 description = "Affiche la chaîne et le programme en cours à chaque changement de chaîne.") {
                 vm.store.bannerOnZap = !vm.store.bannerOnZap; revision++
             },
+            Row2.Item("Garder la chaîne précédente en incrustation", toggle = vm.store.pipOnZap,
+                description = "En changeant de chaîne, l'ancienne continue (sans le son) dans un coin de l'écran. " +
+                    "« 0 » échange les deux, Retour ferme l'incrustation. Nécessite un appareil capable de lire deux vidéos à la fois.") {
+                vm.store.pipOnZap = !vm.store.pipOnZap; revision++
+            },
             Row2.Item("Chaînes en direct", value = country,
                 description = "Bouquet utilisé pour l'accueil, la liste des chaînes et le guide TV.") {
                 val list = countries
                 if (list.isNotEmpty()) vm.ask(Choice("Chaînes en direct", list.map { it.label },
                     list.indexOfFirst { it.id == vm.store.liveCountry }) { i -> vm.changeCountry(list[i].id); revision++ })
+            },
+            Row2.Header("Lecture"),
+            Row2.Item("Sous-titres", toggle = vm.subtitlesOn,
+                description = "Affiche les sous-titres français quand le programme en propose. Pendant la lecture : " +
+                    "touche Sous-titres de la télécommande, ou ▶ puis OK (Audio et sous-titres).") {
+                vm.setSubtitles(!vm.subtitlesOn); revision++
             },
             Row2.Header("Catch-up TV & More"),
             Row2.Item(
@@ -122,7 +163,16 @@ fun SettingsScreen(vm: AppViewModel) {
         )
     } else {
         val cat = schema?.getOrNull(category - 1)
-        cat?.entries.orEmpty().mapNotNull { e -> addonRow(vm, e, ::saveSetting, onAction = { url -> vm.runAction(url) }) }
+        val entries = cat?.entries.orEmpty()
+        val accounts = accountsOf(entries)
+        val copyRow = if (accounts.size >= 2) listOf(
+            Row2.Header("Raccourci"),
+            Row2.Item("Copier un compte vers d'autres chaînes",
+                description = "Reprend l'identifiant et le mot de passe d'une chaîne pour les chaînes que vous choisissez.") {
+                copyAccount(accounts)
+            },
+        ) else emptyList()
+        copyRow + entries.mapNotNull { e -> addonRow(vm, e, ::saveSetting, onAction = { url -> vm.runAction(url) }) }
     }
 
     Row(Modifier.fillMaxSize().padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp)) {
@@ -165,6 +215,21 @@ fun SettingsScreen(vm: AppViewModel) {
         }
     }
 }
+
+/** A service of the add-on that needs a login (TF1+, 6play, RMC+…). */
+private data class Account(val name: String, val login: SettingEntry, val password: SettingEntry)
+
+private fun accountsOf(entries: List<SettingEntry>): List<Account> = entries
+    .filter { it.type == "text" && it.id.endsWith(".login") }
+    .mapNotNull { login ->
+        val prefix = login.id.removeSuffix(".login")
+        val password = entries.firstOrNull { it.id == "$prefix.password" } ?: return@mapNotNull null
+        val name = login.label
+            .replace(Regex("^(Identifiant|Login|Nom d'utilisateur|E-?mail)\\s*(de |d')?", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s*(login|username|e-?mail)$", RegexOption.IGNORE_CASE), "")
+            .trim().ifBlank { prefix }
+        Account(name, login, password)
+    }
 
 private fun addonRow(
     vm: AppViewModel,

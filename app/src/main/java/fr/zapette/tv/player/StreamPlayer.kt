@@ -35,6 +35,8 @@ object StreamPlayer {
                 buildUponParameters()
                     .setPreferredAudioLanguage("fr")
                     .setPreferredTextLanguage("fr")
+                    .setSelectUndeterminedTextLanguage(true)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)   // subtitles follow the user's choice
             )
         }
         // Short start buffer: zapping must feel instant
@@ -108,10 +110,22 @@ object StreamPlayer {
             factory.setDrmSessionManagerProvider { manager }
         }
 
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().clearOverrides().build()
+        applySubtitles(player, subtitlesOn)
+
         val source = factory.createMediaSource(item.build())
         player.setMediaSource(source, startPositionMs.coerceAtLeast(0))
         player.prepare()
         player.playWhenReady = true
+    }
+
+    /** Shows or hides subtitles (French first) on a player, at any time. */
+    fun applySubtitles(player: ExoPlayer, on: Boolean) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !on)
+            .setPreferredTextLanguage("fr")
+            .setSelectUndeterminedTextLanguage(true)
+            .build()
     }
 
     private fun drmUuid(type: String): UUID = when {

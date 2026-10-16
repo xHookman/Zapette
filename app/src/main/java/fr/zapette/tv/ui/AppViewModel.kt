@@ -84,7 +84,10 @@ data class Choice(
     val title: String,
     val options: List<String>,
     val selected: Int = -1,
-    val onPick: (Int) -> Unit,
+    /** Multiple selection: the answer goes to [onMulti]. */
+    val multi: Boolean = false,
+    val onMulti: (List<Int>) -> Unit = {},
+    val onPick: (Int) -> Unit = {},
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -154,6 +157,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var hero by mutableStateOf<Hero?>(null)
 
+    /** Subtitles on/off, shared with the add-on's "active_subtitle" setting. */
+    var subtitlesOn by mutableStateOf(false)
+        private set
+
+    fun setSubtitles(on: Boolean) {
+        subtitlesOn = on
+        viewModelScope.launch { runCatching { engine.setSetting("active_subtitle", if (on) "true" else "false") } }
+    }
+
+    /** Called when the add-on setting was changed from its own settings page. */
+    fun syncSubtitles(value: String) {
+        subtitlesOn = value.equals("true", true)
+    }
+
     /**
      * True when the tab content should take the focus back (app start, return
      * from the player or a browse screen). False while the user moves in the
@@ -183,6 +200,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _boot.value = Boot.Loading("Préparation de Catch-up TV & More…")
             try {
                 engine.start()
+                subtitlesOn = runCatching { engine.getSetting("active_subtitle") == "true" }.getOrDefault(false)
                 _boot.value = Boot.Loading("Chargement des chaînes…")
                 loadChannels()
                 _boot.value = Boot.Ready

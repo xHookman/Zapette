@@ -10,12 +10,12 @@ on allume, on tombe sur sa dernière chaîne, on zappe avec ▲▼, on tape « 2
 
 | | |
 |---|---|
-| **Direct** | Les 70+ chaînes françaises numérotées comme sur la TNT (1 TF1, 2 France 2… 27 Culturebox), zapping instantané ▲▼ / CH+ CH−, saisie du numéro au pavé, retour à la chaîne précédente (« 0 » ou touche *Last*), bandeau « maintenant / à suivre » avec progression, liste des chaînes en surimpression (◀ ou OK), fiche du programme (▶). |
+| **Direct** | Les 70+ chaînes françaises numérotées comme sur la TNT (1 TF1, 2 France 2… 27 Culturebox), zapping avec CH+ CH−, saisie du numéro au pavé, retour à la chaîne précédente (« 0 » ou touche *Last*), bandeau « maintenant / à suivre » avec progression, liste des chaînes en surimpression (◀ ou OK), fiche du programme (▶). |
 | **Accueil** | « En ce moment » (vignette du programme diffusé sur chaque chaîne), « Reprendre la lecture », « Ce soir à la télé », accès rapide aux services de replay. |
 | **Guide TV** | Programme complet d'aujourd'hui et de demain, chaîne par chaîne, issu des fichiers XMLTV de Catch-up TV & More. |
 | **Replay / Explorer** | Toute l'arborescence de l'extension (France TV, TF1+, 6play, Arte, sites web, autres pays…) en grilles de vignettes, pages suivantes chargées automatiquement, recherche, menus contextuels (appui long sur OK). |
 | **Lecteur** | Media3/ExoPlayer : HLS, DASH, Smooth Streaming, Widevine/PlayReady/ClearKey avec les en-têtes et le format de licence de *inputstream.adaptive*, choix audio / sous-titres, reprise de lecture. |
-| **Réglages** | Les réglages de l'extension (comptes TF1+/M6+, qualité, langues…) générés depuis son `settings.xml`, + mise à jour de l'extension depuis GitHub **sans mettre à jour l'application**. |
+| **Réglages** | Les réglages de l'extension (comptes TF1+/M6+, qualité, langues…) générés depuis son `settings.xml`, copie d'un compte vers plusieurs chaînes, sous-titres activables à tout moment, incrustation de la chaîne précédente, + mise à jour de l'extension depuis GitHub **sans mettre à jour l'application**. |
 
 ## Comment ça marche
 
@@ -77,13 +77,15 @@ Avec l'application *Downloader* (ou *Send Files to TV*), ou en ADB :
 
 | Touche | En direct | En replay |
 |---|---|---|
-| ▲ ▼ / CH+ CH− | chaîne suivante / précédente | afficher les commandes · ▼ audio & sous-titres |
-| 0-9 | aller à la chaîne n° (aussi depuis les menus) · « 0 » = chaîne précédente | — |
+| CH+ CH− | chaîne suivante / précédente | — |
+| ▲ ▼ | affiche le bandeau (ne zappe pas) | afficher les commandes · ▼ audio & sous-titres |
+| 0-9 | aller à la chaîne n° (aussi depuis les menus) · « 0 » = chaîne précédente, ou échange avec l'incrustation | — |
 | OK | bandeau → liste des chaînes | lecture / pause |
 | ◀ | liste des chaînes | −10 s (maintenir : −30 s, −60 s) |
 | ▶ | fiche du programme (OK : audio & sous-titres) | +10 s (maintenir : +30 s, +60 s) |
-| Menu / Sous-titres | audio & sous-titres | audio & sous-titres |
-| Retour | ferme le panneau ouvert, puis quitte le lecteur | quitte (la position est mémorisée) |
+| Menu | audio & sous-titres | audio & sous-titres |
+| Sous-titres | active / désactive les sous-titres | active / désactive les sous-titres |
+| Retour | ferme le panneau ouvert, puis l'incrustation, puis quitte le lecteur | quitte (la position est mémorisée) |
 | OK long (menus) | — | menu contextuel de l'extension (favoris, masquer…) |
 
 ## Limites à connaître

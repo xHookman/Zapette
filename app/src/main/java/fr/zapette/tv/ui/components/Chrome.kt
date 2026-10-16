@@ -244,10 +244,10 @@ fun AppDialogs(vm: AppViewModel) {
                         onDone = { value -> vm.askText(null); if (value != null) ask.onDone(value) },
                     )
                     c != null -> SelectDialog(
-                        title = c.title, options = c.options, preselect = c.selected, multi = false,
+                        title = c.title, options = c.options, preselect = c.selected, multi = c.multi,
                         onDismiss = { vm.dismissChoice() },
                         onPick = { vm.dismissChoice(); if (it >= 0) c.onPick(it) },
-                        onMulti = {},
+                        onMulti = { vm.dismissChoice(); c.onMulti(it) },
                     )
                 }
             }
