@@ -237,7 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** App-wide player for live TV: it survives the full screen for the corner mini-player. */
     fun livePlayer(): ExoPlayer =
-        sharedLivePlayer ?: StreamPlayer.create(getApplication()).also { sharedLivePlayer = it }
+        sharedLivePlayer ?: StreamPlayer.create(getApplication<Application>()).also { sharedLivePlayer = it }
 
     fun currentLivePlayer(): ExoPlayer? = sharedLivePlayer
 

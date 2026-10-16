@@ -52,7 +52,15 @@ jobs:
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --stacktrace
+          set -o pipefail
+          ./gradlew :app:assembleRelease 2>&1 | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          # Compiler errors as one annotation, readable without downloading the logs
+          msg=$(grep -E "^e: |What went wrong|^> " build.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Build::${msg}"
 
       - name: Name the APK files
         run: |

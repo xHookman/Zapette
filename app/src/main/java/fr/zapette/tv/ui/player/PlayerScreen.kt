@@ -86,6 +86,7 @@ import fr.zapette.tv.player.StreamPlayer
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.Choice
 import fr.zapette.tv.ui.PlayerRequest
+import fr.zapette.tv.ui.Route
 import fr.zapette.tv.ui.components.ChannelLogo
 import fr.zapette.tv.ui.components.Clock
 import fr.zapette.tv.ui.components.FocusSurface
