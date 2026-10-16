@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,11 @@ fun HomeScreen(vm: AppViewModel) {
         vm.backdrop = p?.icon?.ifBlank { null } ?: c.fanart
     }
 
+    // Prime time of the main channels: computed once per guide update, not at each frame
+    val tonight = remember(channels, epg) {
+        channels.filter { it.number in 1..27 }.mapNotNull { c -> vm.primeTime(c)?.let { c to it } }
+    }
+
     Column(Modifier.fillMaxSize()) {
         HeroPanel(vm.hero)
         LazyColumn(
@@ -139,7 +145,6 @@ fun HomeScreen(vm: AppViewModel) {
                 }
             }
 
-            val tonight = channels.filter { it.number in 1..27 }.mapNotNull { c -> vm.primeTime(c)?.let { c to it } }
             if (tonight.isNotEmpty()) item(key = "tonight") {
                 Column {
                     SectionTitle("Ce soir à la télé")

@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
@@ -20,6 +22,7 @@ import kotlinx.serialization.json.longOrNull
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 /**
  * Updates Zapette itself from the GitHub Releases published by the CI
@@ -48,6 +51,9 @@ class AppUpdater(private val context: Context) {
             val assets = (json["assets"] as? JsonArray).orEmpty().map { it.jsonObject }
                 .filter { it.str("name").endsWith(".apk") }
             val asset = pickAsset(assets) ?: return@runCatching null
+            // Only APKs published in this app's own GitHub releases
+            val expected = "https://github.com/${BuildConfig.UPDATE_REPO}/releases/download/"
+            if (!asset.str("browser_download_url").startsWith(expected)) return@runCatching null
             Release(
                 versionName = tag.removePrefix("v"),
                 versionCode = code,
@@ -120,6 +126,39 @@ class AppUpdater(private val context: Context) {
         } catch (e: ActivityNotFoundException) {
             false
         }
+    }
+
+    /**
+     * Checks that the downloaded file really is a newer Zapette, signed like the
+     * installed one, before handing it to the system installer.
+     */
+    fun verify(file: File, release: Release): String? {
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES
+        else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        if (release.size > 0 && file.length() != release.size) return "fichier incomplet"
+        val archive = pm.getPackageArchiveInfo(file.path, flags) ?: return "fichier APK invalide"
+        if (archive.packageName != context.packageName) return "ce n'est pas Zapette"
+        val archiveCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) archive.longVersionCode
+        else @Suppress("DEPRECATION") archive.versionCode.toLong()
+        if (archiveCode <= BuildConfig.VERSION_CODE) return "version plus ancienne"
+        val installed = pm.getPackageInfo(context.packageName, flags)
+        val a = signatures(archive)
+        val b = signatures(installed)
+        if (a.isNotEmpty() && b.isNotEmpty() && a != b) {
+            return "signature différente : désinstallez Zapette puis installez l'APK depuis GitHub"
+        }
+        return null
+    }
+
+    private fun signatures(info: PackageInfo): Set<String> {
+        val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION") info.signatures
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        return sigs.orEmpty().map { s -> digest.digest(s.toByteArray()).joinToString("") { "%02x".format(it) } }.toSet()
     }
 
     /** Hands the APK to the system installer. */

@@ -86,7 +86,6 @@ import fr.zapette.tv.player.StreamPlayer
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.Choice
 import fr.zapette.tv.ui.PlayerRequest
-import fr.zapette.tv.ui.Route
 import fr.zapette.tv.ui.components.ChannelLogo
 import fr.zapette.tv.ui.components.Clock
 import fr.zapette.tv.ui.components.FocusSurface
@@ -397,29 +396,26 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     }
 
     // Position polling + periodic resume save
-    LaunchedEffect(Unit) {
+    if (!isLive) LaunchedEffect(Unit) {
         var ticks = 0
         while (true) {
             ui.position = exo.currentPosition
             ui.duration = exo.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: 0
-            ui.liveStream = isLive || exo.isCurrentMediaItemLive
-            if (++ticks % 30 == 0 && !isLive) saveResume()
+            ui.liveStream = exo.isCurrentMediaItemLive
+            if (++ticks % 30 == 0) saveResume()
             delay(500)
         }
     }
 
     DisposableEffect(Unit) {
-        vm.miniLive = false
+        if (isLive) vm.miniLive = false
         exo.addListener(listener)
         onDispose {
             saveResume()
             exo.removeListener(listener)
             when {
                 !isLive -> exo.release()
-                // Back from a healthy live channel: it continues in the corner
-                vm.store.miniOnBack && ui.error == null && ui.tunedId != null && vm.stack.none { it is Route.Player } ->
-                    vm.miniLive = true
-                else -> vm.stopLive()
+                !vm.miniLive -> vm.stopLive()   // otherwise it continues in the corner
             }
         }
     }
@@ -451,7 +447,11 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
                 ui.zapList -> { ui.zapList = false; runCatching { rootFocus.requestFocus() } }
                 ui.info -> ui.info = false
                 isLive && ui.banner -> ui.banner = false
-                else -> onClose()
+                else -> {
+                    // A healthy live channel keeps playing in the corner
+                    if (isLive) vm.miniLive = vm.store.miniOnBack && ui.error == null && ui.tunedId != null
+                    onClose()
+                }
             }
             return true
         }
@@ -508,7 +508,7 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(if (isLive) Color.Transparent else Color.Black)
             .focusRequester(rootFocus)
             .onPreviewKeyEvent { e ->
                 val code = e.nativeKeyEvent.keyCode
@@ -518,23 +518,26 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
             }
             .focusable()
     ) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    setKeepContentOnPlayerReset(true)
-                    isFocusable = false
-                    isFocusableInTouchMode = false
-                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                    keepScreenOn = true
-                }
-            },
-            update = { it.player = exo },
-            onRelease = { it.player = null },
-            modifier = Modifier.fillMaxSize(),
-        )
+        // Live: the video is drawn by LiveVideoLayer (shared with the corner mini-player)
+        if (!isLive) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        setShutterBackgroundColor(android.graphics.Color.BLACK)
+                        setKeepContentOnPlayerReset(true)
+                        isFocusable = false
+                        isFocusableInTouchMode = false
+                        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                        keepScreenOn = true
+                    }
+                },
+                update = { it.player = exo },
+                onRelease = { it.player = null },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
 
         val shown = vm.channel(ui.shownId)
 

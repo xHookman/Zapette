@@ -33,6 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -58,6 +62,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Where the focused element is on screen (the mini-player moves out of its way). */
+object FocusTracker {
+    var rect by mutableStateOf<Rect?>(null)
+}
+
 /**
  * The single focusable building block of the app: a surface that lifts and
  * gets a white ring when focused (the Android TV focus language).
@@ -76,15 +85,24 @@ fun FocusSurface(
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
     Surface(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.onFocusChanged {
-            if (it.isFocused != focused) {
-                focused = it.isFocused
-                if (it.isFocused) onFocus?.invoke()
+        modifier = modifier
+            .onGloballyPositioned {
+                coordinates[0] = it
+                if (focused) FocusTracker.rect = it.boundsInWindow()
             }
-        },
+            .onFocusChanged {
+                if (it.isFocused != focused) {
+                    focused = it.isFocused
+                    if (it.isFocused) {
+                        coordinates[0]?.takeIf { c -> c.isAttached }?.let { c -> FocusTracker.rect = c.boundsInWindow() }
+                        onFocus?.invoke()
+                    }
+                }
+            },
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = focusedScale, pressedScale = focusedScale * 0.97f),
         colors = ClickableSurfaceDefaults.colors(

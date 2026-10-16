@@ -204,7 +204,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 updater.download(release) { pct -> _busy.value = "Téléchargement de Zapette ${release.versionName}… $pct %" }
             }
             _busy.value = null
-            file.onSuccess { runCatching { updater.install(it) }.onFailure { e -> toast("Installation impossible", e.message ?: "", "error") } }
+            file.onSuccess { apk ->
+                val problem = updater.verify(apk, release)
+                if (problem != null) {
+                    apk.delete()
+                    toast("Mise à jour refusée", problem, "error")
+                } else {
+                    runCatching { updater.install(apk) }.onFailure { e -> toast("Installation impossible", e.message ?: "", "error") }
+                }
+            }
                 .onFailure { toast("Téléchargement impossible", it.message ?: "", "error") }
         }
     }
@@ -227,13 +235,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ------------------------------------------------------------ live player
-    private var sharedLivePlayer: ExoPlayer? = null
+    private var sharedLivePlayer by mutableStateOf<ExoPlayer?>(null)
 
     /** Channel loaded in the shared live player. */
     var liveChannelId: String? = null
 
     /** The live channel keeps playing in a corner while the user browses. */
     var miniLive by mutableStateOf(false)
+
+    /** Mini-player bottom-right (default) or top-right (when the focus is under it). */
+    var miniAtBottom by mutableStateOf(true)
 
     /** App-wide player for live TV: it survives the full screen for the corner mini-player. */
     fun livePlayer(): ExoPlayer =
@@ -251,6 +262,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Full screen again on the channel playing in the corner. */
     fun expandMini() {
         val id = liveChannelId ?: return
+        livePlayer()
         stack.add(Route.Player(PlayerRequest.Live(id)))
     }
 
@@ -314,6 +326,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             val last = store.lastChannelId
             if (store.startOnLive && last != null && _channels.value.any { it.id == last }) {
+                livePlayer()
                 stack.add(Route.Player(PlayerRequest.Live(last)))
             }
             refreshEpg()
@@ -349,17 +362,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Downloads today's and tomorrow's guide, then refreshes it regularly. */
+    /**
+     * Loads today's guide, then tomorrow's a bit later. The guide files are daily,
+     * so they are only parsed again when the date changes: parsing runs in Python
+     * and would otherwise compete with channel changes on slow TV boxes.
+     */
     fun refreshEpg() {
         epgJob?.cancel()
         epgJob = viewModelScope.launch {
+            // Let the first channel start before parsing the guide
+            if (stack.any { it is Route.Player }) delay(4_000)
+            var loadedDay = ""
             while (true) {
-                val country = store.liveCountry
-                val today = engine.epg(country, 0)
-                if (today.isNotEmpty()) _epg.value = merge(_epg.value.takeIf { it.isNotEmpty() } ?: emptyMap(), today)
-                val tomorrow = engine.epg(country, 1)
-                if (tomorrow.isNotEmpty()) _epg.value = merge(_epg.value, tomorrow)
-                delay(30 * 60_000L)
+                val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+                if (day != loadedDay || _epg.value.isEmpty()) {
+                    val country = store.liveCountry
+                    val today = engine.epg(country, 0)
+                    if (today.isNotEmpty()) {
+                        _epg.value = merge(if (day != loadedDay) emptyMap() else _epg.value, today)
+                        loadedDay = day
+                    }
+                    delay(20_000)
+                    val tomorrow = engine.epg(country, 1)
+                    if (tomorrow.isNotEmpty()) _epg.value = merge(_epg.value, tomorrow)
+                }
+                delay(10 * 60_000L)
             }
+        }
+    }
         }
     }
 
@@ -388,7 +418,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return programmes(channel).firstOrNull { it.isOnAt(t) }
     }
 
-    fun channel(id: String?): Channel? = _channels.value.firstOrNull { it.id == id }
+    private var channelIndex: Pair<List<Channel>, Map<String, Channel>> = emptyList<Channel>() to emptyMap()
+
+    /** Channel by id (indexed: called a lot while zapping and drawing). */
+    fun channel(id: String?): Channel? {
+        if (id == null) return null
+        val list = _channels.value
+        if (channelIndex.first !== list) channelIndex = list to list.associateBy { it.id }
+        return channelIndex.second[id]
+    }
 
     // ------------------------------------------------------------- actions
     fun selectTab(t: Tab) {
@@ -396,6 +434,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun watch(channel: Channel) {
+        livePlayer()   // created before the screen so the video layer is there from the first frame
         stack.add(Route.Player(PlayerRequest.Live(channel.id)))
     }
 

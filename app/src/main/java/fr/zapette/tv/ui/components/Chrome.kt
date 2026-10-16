@@ -65,6 +65,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import fr.zapette.tv.engine.PythonHost
 import fr.zapette.tv.ui.AppViewModel
+import fr.zapette.tv.ui.Route
+import fr.zapette.tv.ui.player.MiniHeight
 import fr.zapette.tv.ui.Tab
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
@@ -99,7 +101,7 @@ fun TopBar(vm: AppViewModel) {
             }
         }
         Spacer(Modifier.weight(1f))
-        if (!vm.miniLive) Clock()   // the corner mini-player sits there
+        Clock()
     }
 }
 
@@ -149,7 +151,12 @@ fun Wordmark(modifier: Modifier = Modifier) {
 @Composable
 fun Toasts(vm: AppViewModel) {
     val toasts by vm.toasts.collectAsState()
-    Box(Modifier.fillMaxSize().padding(end = Z.Gutter, bottom = 32.dp), contentAlignment = Alignment.BottomEnd) {
+    // Stay above the mini-player when it sits in the bottom-right corner
+    val miniBelow = vm.miniLive && vm.miniAtBottom && vm.stack.lastOrNull() !is Route.Player
+    Box(
+        Modifier.fillMaxSize().padding(end = Z.Gutter, bottom = if (miniBelow) 32.dp + MiniHeight + 12.dp else 32.dp),
+        contentAlignment = Alignment.BottomEnd,
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.End) {
             toasts.forEach { t ->
                 key(t.id) {

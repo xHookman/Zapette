@@ -49,7 +49,25 @@ jobs:
           unzip -q app/src/main/assets/addons/script.module.codequick.zip -d /tmp/kodi/addons/script.module.codequick
           python tools/test_bridge.py /tmp/kodi
 
+      # Optional private signing key (GitHub secrets). Without it, the key of the
+      # repository (app/zapette-release.jks) is used.
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ZAPETTE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/zapette.jks"
+            echo "ZAPETTE_KEYSTORE=$RUNNER_TEMP/zapette.jks" >> "$GITHUB_ENV"
+            echo "Clé privée utilisée"
+          else
+            echo "Clé du dépôt utilisée"
+          fi
+
       - name: Build
+        env:
+          ZAPETTE_KEYSTORE_PASSWORD: ${{ secrets.ZAPETTE_KEYSTORE_PASSWORD }}
+          ZAPETTE_KEY_ALIAS: ${{ secrets.ZAPETTE_KEY_ALIAS }}
+          ZAPETTE_KEY_PASSWORD: ${{ secrets.ZAPETTE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           set -o pipefail

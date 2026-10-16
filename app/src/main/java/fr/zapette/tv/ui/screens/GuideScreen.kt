@@ -69,7 +69,9 @@ fun GuideScreen(vm: AppViewModel) {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis / 1000
     }
-    val programmes = epg[selected.xmltvId].orEmpty().filter { it.stop > dayStart && it.start < dayStart + 86_400 }
+    val programmes = remember(epg, selected.xmltvId, dayStart) {
+        epg[selected.xmltvId].orEmpty().filter { it.stop > dayStart && it.start < dayStart + 86_400 }
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(

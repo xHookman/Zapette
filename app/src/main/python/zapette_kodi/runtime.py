@@ -14,6 +14,7 @@ Zapette keeps a single long-lived interpreter, so this module holds:
 from __future__ import unicode_literals
 
 import os
+import re
 import threading
 import time
 
@@ -100,8 +101,27 @@ class ConsoleHost(object):
 host = ConsoleHost()
 
 
+# Secrets that must never reach the logs or an error message (password=..., token=...)
+_SECRET_RE = re.compile(
+    r'((?:password|passwd|pass|pwd|token|access_token|id_token|refresh_token|apikey|api_key|'
+    r'x-dt-auth-token|authorization|signature|uidsignature)["\']?\s*[=:]\s*)'
+    r'("[^"]*"|\'[^\']*\'|(?:Bearer\s+|Basic\s+)?[^&\s,;|}]+)',
+    re.IGNORECASE)
+
+
+def redact(text):
+    """Masks credentials and tokens in a text."""
+    try:
+        return _SECRET_RE.sub(lambda m: m.group(1) + '"***"' if m.group(2)[:1] in "\"'" else m.group(1) + "***",
+                              "%s" % text)
+    except Exception:  # pragma: no cover
+        return text
+
+
 def call_host(method, *args):
     """Call a host method; never let a host failure break the add-on."""
+    if method == "log":
+        args = (args[0], redact(args[1]))
     try:
         return getattr(host, method)(*args)
     except Exception as e:  # pragma: no cover - defensive

@@ -50,7 +50,8 @@ import fr.zapette.tv.ui.components.BusyOverlay
 import fr.zapette.tv.ui.components.TopBar
 import fr.zapette.tv.ui.components.Toasts
 import fr.zapette.tv.ui.components.ZImage
-import fr.zapette.tv.ui.player.MiniPlayer
+import androidx.compose.runtime.key
+import fr.zapette.tv.ui.player.LiveVideoLayer
 import fr.zapette.tv.ui.player.PlayerScreen
 import fr.zapette.tv.ui.screens.BrowseScreen
 import fr.zapette.tv.ui.screens.GuideScreen
@@ -164,12 +165,18 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
                     Backdrop(vm.backdrop)
                     BrowseScreen(vm, route.state, embedded = false)
                 }
-                is Route.Player -> PlayerScreen(vm, route.request, onClose = { vm.onBack() })
+                // Live TV is drawn above, outside of the transition
+                is Route.Player -> if (route.request !is PlayerRequest.Live) {
+                    PlayerScreen(vm, route.request, onClose = { vm.onBack() })
+                }
                 null -> Unit
             }
         }
-        if (vm.miniLive && top !is Route.Player) {
-            MiniPlayer(vm, Modifier.align(Alignment.TopEnd))
+        // Live video: one view, full screen or in the corner, never reloaded
+        val liveTop = (top as? Route.Player)?.takeIf { it.request is PlayerRequest.Live }
+        LiveVideoLayer(vm, fullscreen = liveTop != null)
+        if (liveTop != null) {
+            key(liveTop) { PlayerScreen(vm, liveTop.request, onClose = { vm.onBack() }) }
         }
         if (typed.isNotEmpty()) {
             val match = typed.toIntOrNull()?.let { n -> vm.channels.value.firstOrNull { it.number == n } }

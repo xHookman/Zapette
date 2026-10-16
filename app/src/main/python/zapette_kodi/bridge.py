@@ -99,7 +99,7 @@ def decode_params(url):
     params = dict(parse_qsl(query, keep_blank_values=True))
     if "_pickle_" in params:
         try:
-            params.update(pickle.loads(binascii.unhexlify(params.pop("_pickle_"))))
+            params.update(_safe_unpickle(binascii.unhexlify(params.pop("_pickle_"))))
         except Exception:
             pass
     safe = {}
@@ -107,6 +107,18 @@ def decode_params(url):
         if isinstance(value, (str, int, float, bool)) or value is None:
             safe["%s" % key] = value
     return safe
+
+
+class _PlainUnpickler(pickle.Unpickler):
+    """Only plain data (dict, list, str, numbers): reading item parameters can never run code."""
+
+    def find_class(self, module, name):
+        raise pickle.UnpicklingError("objet interdit: %s.%s" % (module, name))
+
+
+def _safe_unpickle(data):
+    import io
+    return _PlainUnpickler(io.BytesIO(data)).load()
 
 
 def _int(value, default=0):
@@ -333,7 +345,7 @@ def _invoke(url, depth):
     except SystemExit:
         session, exception = runtime.current, None
     except Exception as e:  # import errors, ...
-        traceback.print_exc()
+        runtime.call_host("log", 3, traceback.format_exc())
         return {"kind": "error", "url": url,
                 "error": "%s: %s" % (e.__class__.__name__, e),
                 "notifications": runtime.current.notifications}
@@ -378,7 +390,7 @@ def _invoke(url, depth):
             try:
                 items.append(item_to_json(item_url, li, is_folder))
             except Exception:
-                traceback.print_exc()
+                runtime.call_host("log", 3, traceback.format_exc())
         result.update(kind="directory", items=items)
         if not items and not session.succeeded:
             result.update(kind="empty")
@@ -390,6 +402,10 @@ def _invoke(url, depth):
 
 
 def _error_text(exception, session):
+    return runtime.redact(_error_text_raw(exception, session))
+
+
+def _error_text_raw(exception, session):
     if exception is None:
         if session.notifications:
             n = session.notifications[-1]
@@ -692,14 +708,14 @@ def check_account(service):
             try:
                 import requests
                 if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
-                    return _dumps({"status": "network", "message": "%s" % e})
+                    return _dumps({"status": "network", "message": runtime.redact(e)})
                 if isinstance(e, requests.exceptions.HTTPError) and e.response is not None \
                         and e.response.status_code >= 500:
                     return _dumps({"status": "network", "message": "HTTP %d" % e.response.status_code})
             except ImportError:  # pragma: no cover
                 pass
-            return _dumps({"status": "invalid", "message": _session_message(session) or
-                           "%s: %s" % (e.__class__.__name__, e)})
+            return _dumps({"status": "invalid", "message": runtime.redact(
+                _session_message(session) or "%s: %s" % (e.__class__.__name__, e))})
         finally:
             runtime.silent_dialogs = False
 
