@@ -240,6 +240,9 @@ class _VideoTag(object):
 class Dialog(object):
     def ok(self, heading, message="", *lines):
         text = "\n".join(_text(x) for x in (message,) + lines if x)
+        if runtime.silent_dialogs:
+            runtime.current.notifications.append({"heading": _text(heading), "message": text, "kind": "info"})
+            return True
         runtime.call_host("ok", _text(heading), text)
         return True
 
@@ -247,6 +250,8 @@ class Dialog(object):
         nolabel = _text(kwargs.get("nolabel", ""))
         yeslabel = _text(kwargs.get("yeslabel", ""))
         text = "\n".join(_text(x) for x in (message,) + lines if x and not isinstance(x, int))
+        if runtime.silent_dialogs:
+            return False
         return bool(runtime.call_host("yesno", _text(heading), text, nolabel, yeslabel))
 
     def yesnocustom(self, heading, message="", customlabel="", nolabel="", yeslabel="", **kwargs):

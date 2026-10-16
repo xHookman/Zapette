@@ -1,9 +1,11 @@
 name: Build APK
 
+# Every push on main publishes a GitHub Release "v1.<build number>" with the
+# APK files (no zip). Zapette checks these releases to update itself.
+
 on:
   push:
-    branches: [ main, master ]
-    tags: [ "v*" ]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -11,6 +13,9 @@ on:
         description: "Embarquer la dernière version de Catch-up TV & More (GitHub master)"
         type: boolean
         default: true
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -49,13 +54,27 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease --stacktrace
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: zapette-apk
-          path: app/build/outputs/apk/release/*.apk
+      - name: Name the APK files
+        run: |
+          mkdir -p dist
+          cd app/build/outputs/apk/release
+          for f in app-*-release.apk; do
+            abi="${f#app-}"; abi="${abi%-release.apk}"
+            cp "$f" "$GITHUB_WORKSPACE/dist/zapette-1.${{ github.run_number }}-$abi.apk"
+          done
+          ls -la "$GITHUB_WORKSPACE/dist"
 
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish the release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/*.apk
+          tag_name: v1.${{ github.run_number }}
+          name: Zapette 1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: "true"
+          body: |
+            ${{ github.event.head_commit.message }}
+
+            **Quel fichier ?** `arm64-v8a` pour la plupart des box Android TV (Chromecast Google TV, Shield, Freebox, Bouygues…), `universal` en cas de doute.
+            Les versions suivantes s'installent directement depuis Zapette : Réglages → Mettre à jour Zapette.
+          files: dist/*.apk

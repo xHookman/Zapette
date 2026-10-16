@@ -74,13 +74,24 @@ fun SettingsScreen(vm: AppViewModel) {
     }
     LaunchedEffect(Unit) { vm.backdrop = null }
 
+    fun accountName(prefix: String): String =
+        schema.orEmpty().flatMap { accountsOf(it.entries) }.firstOrNull { it.login.id == "$prefix.login" }?.name ?: prefix
+
     fun saveSetting(id: String, value: String) {
         scope.launch {
             vm.engine.setSetting(id, value)
             if (id == "active_subtitle") vm.syncSubtitles(value)
             revision++
+            // Login or password of a service changed: test them right away
+            val prefix = id.substringBeforeLast('.', "")
+            if (prefix.isNotEmpty() && (id.endsWith(".login") || id.endsWith(".password"))) {
+                val login = vm.engine.getSetting("$prefix.login")
+                val password = vm.engine.getSetting("$prefix.password")
+                if (login.isNotBlank() && password.isNotBlank()) vm.checkAccount(prefix, accountName(prefix))
+            }
         }
     }
+
 
     /** Copies the login and password of one service to the services the user picks. */
     fun copyAccount(accounts: List<Account>) {
@@ -105,6 +116,7 @@ fun SettingsScreen(vm: AppViewModel) {
                         }
                         vm.toast("Compte copié", "${source.name} → " + chosen.joinToString(", ") { it.name })
                         revision++
+                        chosen.forEach { t -> vm.checkAccount(t.login.id.removeSuffix(".login"), t.name) }
                     }
                 },
             ))
@@ -125,10 +137,10 @@ fun SettingsScreen(vm: AppViewModel) {
                 description = "Affiche la chaîne et le programme en cours à chaque changement de chaîne.") {
                 vm.store.bannerOnZap = !vm.store.bannerOnZap; revision++
             },
-            Row2.Item("Garder la chaîne précédente en incrustation", toggle = vm.store.pipOnZap,
-                description = "En changeant de chaîne, l'ancienne continue (sans le son) dans un coin de l'écran. " +
-                    "« 0 » échange les deux, Retour ferme l'incrustation. Nécessite un appareil capable de lire deux vidéos à la fois.") {
-                vm.store.pipOnZap = !vm.store.pipOnZap; revision++
+            Row2.Item("Mini-lecteur en quittant le direct", toggle = vm.store.miniOnBack,
+                description = "Retour depuis une chaîne la garde à l'écran, en haut à droite, pendant que vous parcourez les menus. " +
+                    "Choisir une chaîne la remplace en plein écran ; Lecture revient en plein écran ; Retour (à l'accueil) la ferme.") {
+                vm.store.miniOnBack = !vm.store.miniOnBack; revision++
             },
             Row2.Item("Chaînes en direct", value = country,
                 description = "Bouquet utilisé pour l'accueil, la liste des chaînes et le guide TV.") {
@@ -156,6 +168,14 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         ) else emptyList()) + listOf(
             Row2.Item("Vider le cache", description = "Supprime le cache des pages et le guide TV téléchargé.") { vm.clearCache() },
+            Row2.Header("Application"),
+            Row2.Item(
+                "Mettre à jour Zapette",
+                value = vm.appRelease?.takeIf { it.isNewer }?.let { "${it.versionName} disponible" }
+                    ?: "Version ${BuildConfig.VERSION_NAME}",
+                description = "Télécharge et installe la dernière version compilée sur GitHub. " +
+                    "La première fois, Android demande d'autoriser Zapette à installer des applications.",
+            ) { vm.checkAppUpdate(manual = true) },
             Row2.Header("À propos"),
             Row2.Item("Zapette ${BuildConfig.VERSION_NAME}",
                 description = "Interface TV pour Catch-up TV & More. Les contenus sont fournis par les chaînes ; " +
@@ -170,6 +190,12 @@ fun SettingsScreen(vm: AppViewModel) {
             Row2.Item("Copier un compte vers d'autres chaînes",
                 description = "Reprend l'identifiant et le mot de passe d'une chaîne pour les chaînes que vous choisissez.") {
                 copyAccount(accounts)
+            },
+            Row2.Item("Vérifier les comptes renseignés",
+                description = "Teste la connexion de chaque compte et indique si l'identifiant ou le mot de passe est refusé.") {
+                val filled = accounts.filter { it.login.value.isNotBlank() && it.password.value.isNotBlank() }
+                if (filled.isEmpty()) vm.toast("Aucun compte renseigné")
+                else scope.launch { filled.forEach { vm.checkAccount(it.login.id.removeSuffix(".login"), it.name) } }
             },
         ) else emptyList()
         copyRow + entries.mapNotNull { e -> addonRow(vm, e, ::saveSetting, onAction = { url -> vm.runAction(url) }) }

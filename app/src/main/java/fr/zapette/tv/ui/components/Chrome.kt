@@ -99,7 +99,7 @@ fun TopBar(vm: AppViewModel) {
             }
         }
         Spacer(Modifier.weight(1f))
-        Clock()
+        if (!vm.miniLive) Clock()   // the corner mini-player sits there
     }
 }
 

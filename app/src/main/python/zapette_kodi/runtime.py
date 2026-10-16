@@ -35,6 +35,9 @@ window_properties = {}
 
 lock = threading.RLock()
 
+# While checking an account, the add-on's pop-ups are not shown (the app reports the result).
+silent_dialogs = False
+
 
 def addons_dir():
     return os.path.join(HOME_DIR, "addons")

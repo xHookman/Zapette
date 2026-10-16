@@ -180,6 +180,10 @@ data class SettingEntry(
     val action: String = "",
 )
 
+/** Result of a login test: ok | invalid | network | unsupported */
+@Serializable
+data class AccountCheck(val status: String, val message: String = "")
+
 @Serializable
 data class SettingOption(val value: String, val label: String)
 

@@ -15,7 +15,7 @@ on allume, on tombe sur sa dernière chaîne, on zappe avec ▲▼, on tape « 2
 | **Guide TV** | Programme complet d'aujourd'hui et de demain, chaîne par chaîne, issu des fichiers XMLTV de Catch-up TV & More. |
 | **Replay / Explorer** | Toute l'arborescence de l'extension (France TV, TF1+, 6play, Arte, sites web, autres pays…) en grilles de vignettes, pages suivantes chargées automatiquement, recherche, menus contextuels (appui long sur OK). |
 | **Lecteur** | Media3/ExoPlayer : HLS, DASH, Smooth Streaming, Widevine/PlayReady/ClearKey avec les en-têtes et le format de licence de *inputstream.adaptive*, choix audio / sous-titres, reprise de lecture. |
-| **Réglages** | Les réglages de l'extension (comptes TF1+/M6+, qualité, langues…) générés depuis son `settings.xml`, copie d'un compte vers plusieurs chaînes, sous-titres activables à tout moment, incrustation de la chaîne précédente, + mise à jour de l'extension depuis GitHub **sans mettre à jour l'application**. |
+| **Réglages** | Les réglages de l'extension (comptes TF1+/M6+, qualité, langues…) générés depuis son `settings.xml`, copie d'un compte vers plusieurs chaînes et vérification des identifiants dès la saisie, sous-titres activables à tout moment, mini-lecteur en quittant le direct, mise à jour de l'application depuis les Releases GitHub, + mise à jour de l'extension depuis GitHub **sans mettre à jour l'application**. |
 
 ## Comment ça marche
 
@@ -54,20 +54,24 @@ Fichiers principaux :
 
 ## Obtenir l'APK
 
-### Avec GitHub Actions (le plus simple)
-1. Créez un dépôt GitHub et poussez ce dossier.
-2. L'onglet **Actions** compile automatiquement à chaque push (workflow *Build APK*).
-   Lancez-le à la main (*Run workflow*) pour embarquer la toute dernière version de l'extension.
-3. Téléchargez l'artefact **zapette-apk** : `app-arm64-v8a-release.apk` pour la plupart des box
-   (Chromecast Google TV, Shield, Freebox Pop, Bouygues 4K…), `app-universal-release.apk` en cas de doute.
-4. Poussez un tag `v1.0.0` pour publier l'APK dans une *Release*.
+### Depuis les Releases GitHub (le plus simple)
+Chaque push sur `main` compile l'application et publie une **Release** `v1.<n° de build>` avec les APK
+directement téléchargeables (pas de zip) :
+`zapette-1.N-arm64-v8a.apk` pour la plupart des box (Chromecast Google TV, Shield, Freebox Pop, Bouygues 4K…),
+`zapette-1.N-universal.apk` en cas de doute.
+
+Une fois Zapette installée, les versions suivantes s'installent depuis l'application :
+**Réglages → Mettre à jour Zapette** (Android demande, la première fois, d'autoriser Zapette à installer des applications).
+Toutes les versions sont signées avec la même clé (`app/zapette-release.jks`) pour que la mise à jour soit acceptée.
+Pour utiliser votre propre clé, fournissez `ZAPETTE_KEYSTORE`, `ZAPETTE_KEYSTORE_PASSWORD`, `ZAPETTE_KEY_ALIAS`,
+`ZAPETTE_KEY_PASSWORD` au build (désinstallation nécessaire une fois en changeant de clé).
+
+Lancez le workflow à la main (*Actions → Build APK → Run workflow*) pour embarquer la toute dernière version de l'extension.
 
 ### Avec Android Studio
 Ouvrez le dossier, installez **Python 3.11** sur votre machine (requis par Chaquopy pour préparer
 les paquets Python), puis *Build → Build APK(s)*. En ligne de commande : `./gradlew :app:assembleRelease`.
 
-Sans keystore, l'APK est signé avec la clé de debug (installable directement). Pour signer avec
-votre propre clé : variables `ZAPETTE_KEYSTORE`, `ZAPETTE_KEYSTORE_PASSWORD`, `ZAPETTE_KEY_ALIAS`, `ZAPETTE_KEY_PASSWORD`.
 
 ### Installer sur la TV
 Avec l'application *Downloader* (ou *Send Files to TV*), ou en ADB :
@@ -79,13 +83,14 @@ Avec l'application *Downloader* (ou *Send Files to TV*), ou en ADB :
 |---|---|---|
 | CH+ CH− | chaîne suivante / précédente | — |
 | ▲ ▼ | affiche le bandeau (ne zappe pas) | afficher les commandes · ▼ audio & sous-titres |
-| 0-9 | aller à la chaîne n° (aussi depuis les menus) · « 0 » = chaîne précédente, ou échange avec l'incrustation | — |
+| 0-9 | aller à la chaîne n° (aussi depuis les menus) · « 0 » = chaîne précédente | — |
 | OK | bandeau → liste des chaînes | lecture / pause |
 | ◀ | liste des chaînes | −10 s (maintenir : −30 s, −60 s) |
 | ▶ | fiche du programme (OK : audio & sous-titres) | +10 s (maintenir : +30 s, +60 s) |
 | Menu | audio & sous-titres | audio & sous-titres |
 | Sous-titres | active / désactive les sous-titres | active / désactive les sous-titres |
-| Retour | ferme le panneau ouvert, puis l'incrustation, puis quitte le lecteur | quitte (la position est mémorisée) |
+| Retour | ferme le panneau ouvert, puis quitte le plein écran : la chaîne continue dans le mini-lecteur en haut à droite | quitte (la position est mémorisée) |
+| Lecture (menus) | revient en plein écran sur la chaîne du mini-lecteur | — |
 | OK long (menus) | — | menu contextuel de l'extension (favoris, masquer…) |
 
 ## Limites à connaître

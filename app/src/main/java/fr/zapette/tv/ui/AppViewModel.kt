@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fr.zapette.tv.BuildConfig
 import fr.zapette.tv.ZapetteApplication
+import fr.zapette.tv.engine.AppUpdater
 import fr.zapette.tv.data.Channel
 import fr.zapette.tv.data.Country
 import fr.zapette.tv.data.Notification
@@ -19,6 +21,8 @@ import fr.zapette.tv.data.PluginResult
 import fr.zapette.tv.data.Programme
 import fr.zapette.tv.data.ResumeEntry
 import fr.zapette.tv.data.Stream
+import androidx.media3.exoplayer.ExoPlayer
+import fr.zapette.tv.player.StreamPlayer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,6 +161,105 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var hero by mutableStateOf<Hero?>(null)
 
+    // ------------------------------------------------------------ app update
+    private val updater = AppUpdater(app)
+
+    /** Latest Zapette release found on GitHub (null until checked). */
+    var appRelease by mutableStateOf<AppUpdater.Release?>(null)
+        private set
+
+    fun checkAppUpdate(manual: Boolean) {
+        viewModelScope.launch {
+            if (manual) _busy.value = "Recherche d'une mise à jour de Zapette…"
+            val release = updater.latest()
+            _busy.value = null
+            if (release != null) appRelease = release
+            when {
+                release == null -> if (manual) toast("Mise à jour", "GitHub est injoignable pour le moment.", "error")
+                !release.isNewer -> if (manual) toast("Zapette est à jour", "Version ${BuildConfig.VERSION_NAME}")
+                manual -> _choice.value = Choice(
+                    "Zapette ${release.versionName} disponible (installée : ${BuildConfig.VERSION_NAME})",
+                    listOf("Installer maintenant", "Plus tard"),
+                ) { if (it == 0) installAppUpdate(release) }
+                else -> toast("Zapette ${release.versionName} disponible", "Réglages → Mettre à jour Zapette")
+            }
+        }
+    }
+
+    fun installAppUpdate(release: AppUpdater.Release) {
+        viewModelScope.launch {
+            if (!updater.canInstall()) {
+                toast(
+                    "Autorisation nécessaire",
+                    "Autorisez Zapette à installer des applications, puis relancez la mise à jour.",
+                )
+                if (!updater.openInstallPermission()) toast(
+                    "Autorisation nécessaire",
+                    "Paramètres → Applications → Zapette → Installer des applications inconnues.", "error",
+                )
+                return@launch
+            }
+            _busy.value = "Téléchargement de Zapette ${release.versionName}…"
+            val file = runCatching {
+                updater.download(release) { pct -> _busy.value = "Téléchargement de Zapette ${release.versionName}… $pct %" }
+            }
+            _busy.value = null
+            file.onSuccess { runCatching { updater.install(it) }.onFailure { e -> toast("Installation impossible", e.message ?: "", "error") } }
+                .onFailure { toast("Téléchargement impossible", it.message ?: "", "error") }
+        }
+    }
+
+    // --------------------------------------------------------- account check
+    /** Logs in with the saved credentials and tells the user if they are accepted. */
+    suspend fun checkAccount(service: String, name: String) {
+        _busy.value = "Vérification du compte $name…"
+        val result = engine.checkAccount(service)
+        _busy.value = null
+        when (result.status) {
+            "ok" -> toast("Compte $name valide", "Identifiant et mot de passe acceptés.")
+            "invalid" -> toast("Compte $name refusé", "Identifiant ou mot de passe incorrect.", "error")
+            "network" -> toast(
+                "Vérification impossible ($name)",
+                "Le service ne répond pas : connexion internet, ou accès réservé à la France.", "error",
+            )
+            else -> toast("Compte $name enregistré", "La vérification n'est pas disponible pour ce service.")
+        }
+    }
+
+    // ------------------------------------------------------------ live player
+    private var sharedLivePlayer: ExoPlayer? = null
+
+    /** Channel loaded in the shared live player. */
+    var liveChannelId: String? = null
+
+    /** The live channel keeps playing in a corner while the user browses. */
+    var miniLive by mutableStateOf(false)
+
+    /** App-wide player for live TV: it survives the full screen for the corner mini-player. */
+    fun livePlayer(): ExoPlayer =
+        sharedLivePlayer ?: StreamPlayer.create(getApplication()).also { sharedLivePlayer = it }
+
+    fun currentLivePlayer(): ExoPlayer? = sharedLivePlayer
+
+    fun stopLive() {
+        miniLive = false
+        liveChannelId = null
+        sharedLivePlayer?.release()
+        sharedLivePlayer = null
+    }
+
+    /** Full screen again on the channel playing in the corner. */
+    fun expandMini() {
+        val id = liveChannelId ?: return
+        stack.add(Route.Player(PlayerRequest.Live(id)))
+    }
+
+    override fun onCleared() {
+        sharedLivePlayer?.release()
+        sharedLivePlayer = null
+        super.onCleared()
+    }
+
     /** Subtitles on/off, shared with the add-on's "active_subtitle" setting. */
     var subtitlesOn by mutableStateOf(false)
         private set
@@ -204,6 +307,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _boot.value = Boot.Loading("Chargement des chaînes…")
                 loadChannels()
                 _boot.value = Boot.Ready
+                checkAppUpdate(manual = false)
             } catch (t: Throwable) {
                 _boot.value = Boot.Failed(t.message ?: t.toString())
                 return@launch
@@ -500,6 +604,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun onBack(): Boolean {
         if (_choice.value != null) { _choice.value = null; return true }
         if (stack.isNotEmpty()) { popRoute(); return true }
+        if (miniLive) { stopLive(); return true }
         if (tab != Tab.Home) { tab = Tab.Home; restorePending = true; return true }
         return false
     }

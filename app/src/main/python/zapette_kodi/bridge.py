@@ -654,3 +654,58 @@ def clear_cache():
                 except OSError:
                     pass
         return "ok"
+
+
+# ----------------------------------------------------------- account check
+# Login function of each service in the add-on, and how to read its result.
+_ACCOUNT_CHECKS = {
+    "tf1plus": ("resources.lib.channels.fr.tf1plus", "get_token", {}, lambda r: bool(r) and bool(r[0])),
+    "6play": ("resources.lib.channels.fr.6play", "get_login_token", {}, bool),
+    "rmcplus": ("resources.lib.channels.fr.rmcplus", "get_login_token", {}, bool),
+    "rtbf": ("resources.lib.channels.be.rtbf", "get_redbee_session_token", {}, lambda r: bool(r) and bool(r[0])),
+    "rtlplaybe": ("resources.lib.channels.be.rtlplaybe", "get_login_token", {}, bool),
+    "sfrtv": ("resources.lib.providers.sfrtv", "get_token", {"with_dialog": False}, bool),
+}
+
+
+def check_account(service):
+    """Logs in to a service with the saved credentials, exactly like the add-on does.
+
+    Returns JSON {status: ok | invalid | network | unsupported, message}.
+    """
+    check = _ACCOUNT_CHECKS.get(service)
+    if check is None:
+        return _dumps({"status": "unsupported", "message": ""})
+    module_name, func_name, kwargs, is_ok = check
+    with runtime.lock:
+        session = runtime.new_session("check:" + service)
+        runtime.silent_dialogs = True
+        try:
+            importlib.import_module("codequick")
+            module = importlib.import_module(module_name)
+            func = getattr(module, func_name)
+            plugin = importlib.import_module("codequick").Script()
+            result = func(plugin, **kwargs)
+            ok = is_ok(result)
+            return _dumps({"status": "ok" if ok else "invalid", "message": _session_message(session)})
+        except Exception as e:  # wrong credentials usually end in a KeyError/HTTPError
+            try:
+                import requests
+                if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+                    return _dumps({"status": "network", "message": "%s" % e})
+                if isinstance(e, requests.exceptions.HTTPError) and e.response is not None \
+                        and e.response.status_code >= 500:
+                    return _dumps({"status": "network", "message": "HTTP %d" % e.response.status_code})
+            except ImportError:  # pragma: no cover
+                pass
+            return _dumps({"status": "invalid", "message": _session_message(session) or
+                           "%s: %s" % (e.__class__.__name__, e)})
+        finally:
+            runtime.silent_dialogs = False
+
+
+def _session_message(session):
+    if session.notifications:
+        n = session.notifications[-1]
+        return clean_label(n.get("message") or n.get("heading") or "")
+    return ""

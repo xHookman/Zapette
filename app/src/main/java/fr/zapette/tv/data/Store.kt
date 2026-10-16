@@ -33,10 +33,10 @@ class Store(context: Context) {
         get() = prefs.getBoolean("banner_on_zap", true)
         set(value) = prefs.edit().putBoolean("banner_on_zap", value).apply()
 
-    /** When zapping, keep the previous channel playing in a corner of the screen. */
-    var pipOnZap: Boolean
-        get() = prefs.getBoolean("pip_on_zap", false)
-        set(value) = prefs.edit().putBoolean("pip_on_zap", value).apply()
+    /** Back from a live channel keeps it playing in a corner while browsing the menus. */
+    var miniOnBack: Boolean
+        get() = prefs.getBoolean("mini_on_back", true)
+        set(value) = prefs.edit().putBoolean("mini_on_back", value).apply()
 
     // ------------------------------------------------------------- resume
     private val _resume = MutableStateFlow(loadResume())

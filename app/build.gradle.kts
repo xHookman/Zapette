@@ -20,8 +20,11 @@ android {
         applicationId = "fr.zapette.tv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Each CI build is a release "v1.<build number>"; the app updates itself from them
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        versionCode = build ?: 1
+        versionName = if (build != null) "1.$build" else "1.0-dev"
+        buildConfigField("String", "UPDATE_REPO", "\"${System.getenv("GITHUB_REPOSITORY") ?: "xHookman/Zapette"}\"")
 
         ndk {
             // Python (Chaquopy) is native: ship the ABIs of Android TV devices
@@ -29,16 +32,22 @@ android {
         }
     }
 
-    // Release builds: provide a keystore through environment variables,
-    // otherwise the debug key is used so the APK is always installable.
-    val releaseKeystore = System.getenv("ZAPETTE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    // Every build must be signed with the same key, otherwise Android refuses the
+    // in-app update. The repository key (zapette-release.jks) is used unless your
+    // own keystore is provided through environment variables / GitHub secrets.
+    val ownKeystore = System.getenv("ZAPETTE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
     signingConfigs {
-        if (releaseKeystore != null) {
-            create("release") {
-                storeFile = releaseKeystore
+        create("release") {
+            if (ownKeystore != null) {
+                storeFile = ownKeystore
                 storePassword = System.getenv("ZAPETTE_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ZAPETTE_KEY_ALIAS")
                 keyPassword = System.getenv("ZAPETTE_KEY_PASSWORD")
+            } else {
+                storeFile = file("zapette-release.jks")
+                storePassword = "zapette-tv"
+                keyAlias = "zapette"
+                keyPassword = "zapette-tv"
             }
         }
     }
@@ -46,7 +55,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

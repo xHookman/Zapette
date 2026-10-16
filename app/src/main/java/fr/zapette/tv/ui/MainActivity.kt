@@ -50,6 +50,7 @@ import fr.zapette.tv.ui.components.BusyOverlay
 import fr.zapette.tv.ui.components.TopBar
 import fr.zapette.tv.ui.components.Toasts
 import fr.zapette.tv.ui.components.ZImage
+import fr.zapette.tv.ui.player.MiniPlayer
 import fr.zapette.tv.ui.player.PlayerScreen
 import fr.zapette.tv.ui.screens.BrowseScreen
 import fr.zapette.tv.ui.screens.GuideScreen
@@ -116,6 +117,14 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
                 in android.view.KeyEvent.KEYCODE_NUMPAD_0..android.view.KeyEvent.KEYCODE_NUMPAD_9 -> code - android.view.KeyEvent.KEYCODE_NUMPAD_0
                 else -> -1
             }
+            // Play key: the channel playing in the corner goes back to full screen
+            if (vm.miniLive && top !is Route.Player && e.type == KeyEventType.KeyDown && (
+                    code == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+                        code == android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
+            ) {
+                vm.expandMini()
+                return@onPreviewKeyEvent true
+            }
             if (digit < 0 || top is Route.Player) return@onPreviewKeyEvent false
             if (e.type == KeyEventType.KeyDown) {
                 typed = (typed + digit).takeLast(3)
@@ -158,6 +167,9 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
                 is Route.Player -> PlayerScreen(vm, route.request, onClose = { vm.onBack() })
                 null -> Unit
             }
+        }
+        if (vm.miniLive && top !is Route.Player) {
+            MiniPlayer(vm, Modifier.align(Alignment.TopEnd))
         }
         if (typed.isNotEmpty()) {
             val match = typed.toIntOrNull()?.let { n -> vm.channels.value.firstOrNull { it.number == n } }

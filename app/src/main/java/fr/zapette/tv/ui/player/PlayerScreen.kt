@@ -12,7 +12,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import android.view.SurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -122,8 +121,6 @@ private class PlayerUi {
     var zapList by mutableStateOf(false)
     var info by mutableStateOf(false)
     var number by mutableStateOf("")
-    /** Channel kept playing in the corner (picture-in-picture on zap). */
-    var pipId by mutableStateOf<String?>(null)
 
     // vod
     var controls by mutableStateOf(true)
@@ -143,33 +140,29 @@ private class PlayerJobs {
     var flash: Job? = null
 }
 
-/** Actions the player listeners need but which are declared later in the composable. */
+/** Actions the player listener needs but which are declared later in the composable. */
 private class PlayerActions {
     var retry: () -> Unit = {}
-    var closePip: (failed: Boolean) -> Unit = {}
 }
 
 @Composable
 fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // Main player; with the corner option, it is swapped with the corner one.
-    var exo by remember { mutableStateOf(StreamPlayer.create(context)) }
-    var pip by remember { mutableStateOf<ExoPlayer?>(null) }
+    val isLive = request is PlayerRequest.Live
+    // Live TV uses the app-wide player, so that the channel keeps playing in the
+    // corner mini-player after leaving the full screen.
+    val exo: ExoPlayer = remember { if (isLive) vm.livePlayer() else StreamPlayer.create(context) }
     val ui = remember { PlayerUi() }
     val rootFocus = remember { FocusRequester() }
     val channels by vm.channels.collectAsState()
     val now by vm.now.collectAsState()
-    val isLive = request is PlayerRequest.Live
 
     val jobs = remember { PlayerJobs() }
-    var showBannerLater by remember { mutableStateOf(false) }
     val actions = remember { PlayerActions() }
 
-    // One listener per player: only the main player drives the overlay.
-    fun listenerFor(p: ExoPlayer) = object : Player.Listener {
+    val listener = remember { object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
-            if (p !== exo) return
             when (state) {
                 Player.STATE_READY -> { ui.loading = false; ui.attempts = 0 }
                 Player.STATE_BUFFERING -> ui.loading = true
@@ -182,72 +175,22 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (p === exo) ui.playing = isPlaying
+            ui.playing = isPlaying
         }
 
         override fun onPlayerError(error: PlaybackException) {
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
-                p.seekToDefaultPosition(); p.prepare(); return
+                exo.seekToDefaultPosition(); exo.prepare(); return
             }
-            if (p !== exo) { actions.closePip(true); return }
             // A live stream may drop: retry once silently
             if (isLive && ui.attempts == 0 && error.errorCode in NETWORK_ERRORS) { actions.retry(); return }
             ui.loading = false
             ui.error = friendlyError(error)
         }
-    }
-
-    fun newPlayer(): ExoPlayer = StreamPlayer.create(context).also { it.addListener(listenerFor(it)) }
-
-    fun closePip(failed: Boolean = false) {
-        val p = pip ?: return
-        pip = null
-        ui.pipId = null
-        p.volume = 0f
-        p.stop()
-        scope.launch { delay(500); p.release() }   // let the corner view detach first
-        if (failed) vm.toast("Incrustation impossible", "Cet appareil ne peut pas décoder deux chaînes à la fois.")
-    }
-    actions.closePip = { closePip(it) }
-
-    /** The current channel goes to the corner (muted) and a fresh player takes the full screen. */
-    fun moveMainToPip() {
-        val old = exo
-        val recycled = pip
-        old.volume = 0f
-        StreamPlayer.applySubtitles(old, false)
-        recycled?.stop()
-        pip = old
-        ui.pipId = ui.tunedId
-        exo = (recycled ?: newPlayer()).also { it.volume = 1f }
-    }
-
-    /** Full screen and corner exchange their channels instantly (both are already playing). */
-    fun swapPip() {
-        val p = pip ?: return
-        val old = exo
-        val oldHealthy = ui.error == null && old.playbackState == Player.STATE_READY
-        old.volume = 0f
-        StreamPlayer.applySubtitles(old, false)
-        p.volume = 1f
-        StreamPlayer.applySubtitles(p, vm.subtitlesOn)
-        exo = p
-        pip = old
-        val newMain = ui.pipId
-        ui.pipId = ui.tunedId
-        ui.tunedId = newMain
-        ui.shownId = newMain
-        vm.channel(newMain)?.let { vm.rememberChannel(it) }
-        ui.error = null
-        ui.loading = p.playbackState != Player.STATE_READY
-        ui.playing = p.isPlaying
-        if (!oldHealthy) closePip()
-        showBannerLater = true
-    }
+    } }
 
     // ------------------------------------------------------------ helpers
     fun showBanner(seconds: Long = 5) {
-        showBannerLater = false
         ui.banner = true
         jobs.banner?.cancel()
         jobs.banner = scope.launch { delay(seconds * 1000); if (!ui.zapList && !ui.info) { ui.banner = false } }
@@ -271,23 +214,16 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     }
 
     fun tune(channel: Channel, immediate: Boolean) {
-        if (channel.id == ui.pipId && pip != null) {
-            jobs.tune?.cancel()
-            swapPip()
-            return
-        }
         ui.shownId = channel.id
         ui.error = null
         if (vm.store.bannerOnZap || !immediate) showBanner()
         jobs.tune?.cancel()
         jobs.tune = scope.launch {
             if (!immediate) delay(450)          // let fast zapping settle on a channel
-            if (vm.store.pipOnZap && ui.tunedId != null && ui.tunedId != channel.id && ui.error == null &&
-                exo.playbackState == Player.STATE_READY
-            ) moveMainToPip()
             ui.loading = true
             ui.tunedId = channel.id
             vm.rememberChannel(channel)
+            vm.liveChannelId = channel.id
             exo.stop()
             val result = vm.resolve(channel.url, selectedJson(channel))
             if (!isActive) return@launch
@@ -413,17 +349,28 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     }
     actions.retry = { retry() }
 
-    LaunchedEffect(showBannerLater) { if (showBannerLater) showBanner() }
-
     // ------------------------------------------------------------- start
     LaunchedEffect(Unit) {
         runCatching { rootFocus.requestFocus() }
         when (request) {
             is PlayerRequest.Live -> {
                 val c = vm.channel(request.channelId) ?: ordered().firstOrNull()
-                if (c == null) { ui.loading = false; ui.error = "Aucune chaîne disponible." } else tune(c, true)
+                when {
+                    c == null -> { ui.loading = false; ui.error = "Aucune chaîne disponible." }
+                    // Coming back from the mini-player: the channel is already playing
+                    c.id == vm.liveChannelId && exo.playbackState != Player.STATE_IDLE -> {
+                        ui.tunedId = c.id
+                        ui.shownId = c.id
+                        ui.loading = exo.playbackState != Player.STATE_READY
+                        ui.playing = exo.isPlaying
+                        exo.play()
+                        showBanner()
+                    }
+                    else -> tune(c, true)
+                }
             }
             is PlayerRequest.Vod -> {
+                vm.stopLive()
                 ui.title = request.title; ui.subtitle = request.subtitle; ui.image = request.image
                 val result = vm.resolve(request.url, request.selected)
                 val stream = result.stream
@@ -440,6 +387,7 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
                 showControls()
             }
             is PlayerRequest.Direct -> {
+                vm.stopLive()
                 ui.title = request.title.ifBlank { request.stream.label }
                 play(request.stream)
                 showControls()
@@ -460,11 +408,18 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     }
 
     DisposableEffect(Unit) {
-        exo.addListener(listenerFor(exo))
+        vm.miniLive = false
+        exo.addListener(listener)
         onDispose {
             saveResume()
-            exo.release()
-            pip?.release()
+            exo.removeListener(listener)
+            when {
+                !isLive -> exo.release()
+                // Back from a healthy live channel: it continues in the corner
+                vm.store.miniOnBack && ui.error == null && ui.tunedId != null && vm.stack.none { it is Route.Player } ->
+                    vm.miniLive = true
+                else -> vm.stopLive()
+            }
         }
     }
 
@@ -473,11 +428,8 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> { saveResume(); exo.pause(); pip?.pause() }
-                Lifecycle.Event.ON_START -> if (isLive) {
-                    exo.seekToDefaultPosition(); exo.play()
-                    pip?.let { it.seekToDefaultPosition(); it.play() }
-                }
+                Lifecycle.Event.ON_STOP -> { saveResume(); exo.pause() }
+                Lifecycle.Event.ON_START -> if (isLive) { exo.seekToDefaultPosition(); exo.play() }
                 else -> Unit
             }
         }
@@ -497,7 +449,6 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
                 ui.number.isNotEmpty() -> { ui.number = ""; jobs.number?.cancel() }
                 ui.zapList -> { ui.zapList = false; runCatching { rootFocus.requestFocus() } }
                 ui.info -> ui.info = false
-                pip != null -> closePip()
                 isLive && ui.banner -> ui.banner = false
                 else -> onClose()
             }
@@ -584,11 +535,6 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
             modifier = Modifier.fillMaxSize(),
         )
 
-        val corner = pip
-        if (isLive && corner != null) {
-            PipWindow(vm, ui, corner, Modifier.align(Alignment.TopEnd))
-        }
-
         val shown = vm.channel(ui.shownId)
 
         // Loading
@@ -643,7 +589,7 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
                 }
             }
             if (ui.number.isNotEmpty()) {
-                NumberBox(ui.number, channels, Modifier.align(if (pip != null) Alignment.TopStart else Alignment.TopEnd))
+                NumberBox(ui.number, channels, Modifier.align(Alignment.TopEnd))
             }
         } else {
             VodControls(ui, Modifier.align(Alignment.BottomCenter))
@@ -756,49 +702,6 @@ private fun LiveBanner(vm: AppViewModel, ui: PlayerUi, channel: Channel?, now: L
                     Text("OK chaînes   ▶ infos   CH+ CH− zapper", style = ZType.Small, color = Z.Faint)
                 }
             }
-        }
-    }
-}
-
-/** The previous channel, still playing (muted) in the corner. */
-@Composable
-private fun PipWindow(vm: AppViewModel, ui: PlayerUi, player: ExoPlayer, modifier: Modifier) {
-    val channel = vm.channel(ui.pipId)
-    Column(modifier.padding(top = 28.dp, end = Z.Gutter).width(400.dp)) {
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                .border(2.dp, Color(0x80FFFFFF), RoundedCornerShape(6.dp))
-                .padding(2.dp),
-        ) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        setShutterBackgroundColor(android.graphics.Color.BLACK)
-                        isFocusable = false
-                        isFocusableInTouchMode = false
-                        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                        // Draw this video surface above the full-screen one
-                        (videoSurfaceView as? SurfaceView)?.setZOrderMediaOverlay(true)
-                    }
-                },
-                update = { it.player = player },
-                onRelease = { it.player = null },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(8.dp))
-                .background(Color(0xB3000000)).padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (channel != null) {
-                ChannelLogo(channel.logo, size = 26.dp)
-                Spacer(Modifier.width(8.dp))
-                SingleLine("${channel.number}  ${channel.label}", ZType.Small, Z.Text, Modifier.weight(1f))
-            } else Spacer(Modifier.weight(1f))
-            Text("0 basculer · Retour fermer", style = ZType.Small, color = Z.Faint)
         }
     }
 }

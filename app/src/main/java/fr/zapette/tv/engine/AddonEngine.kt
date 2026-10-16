@@ -5,6 +5,7 @@ import android.util.Log
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import fr.zapette.tv.data.AccountCheck
 import fr.zapette.tv.data.Channel
 import fr.zapette.tv.data.Country
 import fr.zapette.tv.data.PluginResult
@@ -97,6 +98,12 @@ class AddonEngine(private val context: Context) {
     suspend fun setSetting(id: String, value: String) = withContext(addonThread) { call("set_setting", id, value) }
 
     suspend fun getSetting(id: String): String = withContext(addonThread) { call("get_setting", id) }
+
+    /** Logs in to a service (tf1plus, 6play…) with the saved credentials. */
+    suspend fun checkAccount(service: String): AccountCheck = withContext(addonThread) {
+        runCatching { ZapetteJson.decodeFromString(AccountCheck.serializer(), call("check_account", service)) }
+            .getOrElse { AccountCheck("network", it.message ?: "") }
+    }
 
     suspend fun clearCache() = withContext(addonThread) { call("clear_cache") }
 
