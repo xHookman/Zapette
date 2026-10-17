@@ -82,10 +82,8 @@ app/src/main/python/xbmc*.py, kodi_six, inputstreamhelper, YDStreamExtractor   l
 ## Obtenir l'APK
 
 ### Depuis les Releases GitHub (le plus simple)
-Chaque push sur `main` compile l'application et publie une **Release** `v1.<n° de build>` avec les APK
-directement téléchargeables (pas de zip) :
-`zapette-1.N-arm64-v8a.apk` pour la plupart des box (Chromecast Google TV, Shield, Freebox Pop, Bouygues 4K…),
-`zapette-1.N-universal.apk` en cas de doute.
+Chaque push sur `main` compile l'application et publie une **Release** `v1.<n° de build>` avec **un seul APK**
+(`zapette-1.N.apk`), compatible avec toutes les TV et box Android (ARM 64 et 32 bits).
 
 Une fois Zapette installée, les versions suivantes s'installent depuis l'application :
 **Réglages → Mettre à jour Zapette** (Android demande, la première fois, d'autoriser Zapette à installer des applications).
@@ -107,7 +105,7 @@ les paquets Python), puis *Build → Build APK(s)*. En ligne de commande : `./gr
 
 ### Installer sur la TV
 Avec l'application *Downloader* (ou *Send Files to TV*), ou en ADB :
-`adb connect <ip-de-la-tv> && adb install app-arm64-v8a-release.apk`
+`adb connect <ip-de-la-tv> && adb install zapette-1.N.apk`
 
 ## Télécommande
 

@@ -50,7 +50,8 @@ class AppUpdater(private val context: Context) {
             val code = tag.substringAfterLast('.').toIntOrNull() ?: return@runCatching null
             val assets = (json["assets"] as? JsonArray).orEmpty().map { it.jsonObject }
                 .filter { it.str("name").endsWith(".apk") }
-            val asset = pickAsset(assets) ?: return@runCatching null
+            // One APK per release, for every device
+            val asset = assets.singleOrNull() ?: return@runCatching null
             // Only APKs published in this app's own GitHub releases
             val expected = "https://github.com/${BuildConfig.UPDATE_REPO}/releases/download/"
             if (!asset.str("browser_download_url").startsWith(expected)) return@runCatching null
@@ -63,14 +64,6 @@ class AppUpdater(private val context: Context) {
                 notes = json["body"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             )
         }.getOrNull()
-    }
-
-    /** The APK built for this device's processor, else the universal one. */
-    private fun pickAsset(assets: List<JsonObject>): JsonObject? {
-        for (abi in Build.SUPPORTED_ABIS) {
-            assets.firstOrNull { it.str("name").contains(abi) }?.let { return it }
-        }
-        return assets.firstOrNull { it.str("name").contains("universal") } ?: assets.firstOrNull()
     }
 
     private fun JsonObject.str(key: String) = this[key]?.jsonPrimitive?.contentOrNull.orEmpty()

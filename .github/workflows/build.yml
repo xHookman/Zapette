@@ -93,15 +93,11 @@ jobs:
           msg=$( { grep -E "^e: |ERROR:|Missing class" build.log; grep -A10 "What went wrong" build.log; } | head -150 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Build::${msg}"
 
-      - name: Name the APK files
+      - name: Name the APK
         run: |
           mkdir -p dist
-          cd app/build/outputs/apk/release
-          for f in app-*-release.apk; do
-            abi="${f#app-}"; abi="${abi%-release.apk}"
-            cp "$f" "$GITHUB_WORKSPACE/dist/zapette-1.${{ github.run_number }}-$abi.apk"
-          done
-          ls -la "$GITHUB_WORKSPACE/dist"
+          cp app/build/outputs/apk/release/app-release.apk "dist/zapette-1.${{ github.run_number }}.apk"
+          ls -la dist
 
       - name: Publish the release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.key.outputs.signed == 'true'
@@ -114,6 +110,6 @@ jobs:
           body: |
             ${{ github.event.head_commit.message }}
 
-            **Quel fichier ?** `arm64-v8a` pour la plupart des box Android TV (Chromecast Google TV, Shield, Freebox, Bouygues…), `universal` en cas de doute.
+            Un seul APK, compatible avec toutes les TV et box Android.
             Les versions suivantes s'installent directement depuis Zapette : Réglages → Mettre à jour Zapette.
           files: dist/*.apk

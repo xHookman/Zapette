@@ -167,7 +167,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun pop() {
         if (stack.isEmpty()) return
         val left = stack.removeAt(stack.lastIndex)
-        if (left is Route.Player && left.request is PlayerRequest.Live) playback.leaveFullScreen()
+        if (left is Route.Player && left.request is PlayerRequest.Live) {
+            playback.leaveFullScreen()
+            // "OK OK" can't be guessed: recalled the first times the mini-player appears
+            if (playback.mini && store.miniHints < 3) {
+                store.miniHints++
+                messages.toast("La chaîne continue dans le coin", "OK deux fois rapidement : retour en plein écran")
+            }
+        }
         if (stack.isEmpty()) restoreFocus = true
     }
 

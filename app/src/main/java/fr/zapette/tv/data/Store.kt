@@ -53,6 +53,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("intro_seen", false)
         set(value) = prefs.edit().putBoolean("intro_seen", value).apply()
 
+    /** How many times the "OK OK" hint was shown when the mini-player appeared. */
+    var miniHints: Int
+        get() = prefs.getInt("mini_hints", 0)
+        set(value) = prefs.edit().putInt("mini_hints", value).apply()
+
     /** Light mode for weak TVs: auto | on | off (applied at next start). */
     var perfMode: String
         get() = prefs.getString("perf_mode", "auto") ?: "auto"

@@ -27,8 +27,9 @@ android {
         buildConfigField("String", "UPDATE_REPO", "\"${System.getenv("GITHUB_REPOSITORY") ?: "xHookman/Zapette"}\"")
 
         ndk {
-            // Python (Chaquopy) is native: ship the ABIs of Android TV devices
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            // Python (Chaquopy) is native. One APK for every TV: 64-bit and 32-bit ARM
+            // (many TVs run a 32-bit Android on a 64-bit chip, which confuses users)
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
@@ -53,15 +54,6 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("zapette") ?: signingConfigs.getByName("debug")
-        }
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
         }
     }
 
