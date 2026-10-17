@@ -149,8 +149,10 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
                 return@onPreviewKeyEvent true
             }
             // OK twice quickly, wherever the focus is: back to the channel in the corner
-            if (vm.miniLive && top !is Route.Player && doubleOk.handle(e.nativeKeyEvent)) {
-                return@onPreviewKeyEvent true
+            if (vm.miniLive && top !is Route.Player) {
+                if (doubleOk.handle(e.nativeKeyEvent)) return@onPreviewKeyEvent true
+            } else {
+                doubleOk.reset()
             }
             if (digit < 0 || top is Route.Player) return@onPreviewKeyEvent false
             if (e.type == KeyEventType.KeyDown) {
@@ -266,10 +268,13 @@ class DoubleOk(
     fun handle(e: android.view.KeyEvent): Boolean {
         if (replaying || !isOk(e.keyCode)) return false
         val down = e.action == android.view.KeyEvent.ACTION_DOWN
-        if (swallowNextUp && !down) {
+        if (!down && swallowNextUp) {
+            // Release of the second press of a double OK
             swallowNextUp = false
             return true
         }
+        // A new press never inherits the state of an older double OK
+        if (down && e.repeatCount == 0) swallowNextUp = false
         val pending = heldDown
         if (down) {
             if (e.repeatCount > 0) {
@@ -299,6 +304,14 @@ class DoubleOk(
             return true
         }
         return false
+    }
+
+    /** Forgets any held press (mini-player closed, player opened…). */
+    fun reset() {
+        timer?.cancel()
+        heldDown = null
+        heldUp = null
+        swallowNextUp = false
     }
 
     private fun replay() {
