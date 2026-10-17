@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,10 +66,16 @@ import java.util.Locale
 
 /** Where the focused element is on screen (the mini-player moves out of its way). */
 object FocusTracker {
-    var rect by mutableStateOf<Rect?>(null)
-
-    /** On only while the mini-player is shown: tracking positions costs work at every scroll frame. */
+    /** On only while the mini-player is shown. */
     var enabled by mutableStateOf(false)
+
+    /** Changes at each focus move (the only state written: no work while scrolling). */
+    var tick by mutableIntStateOf(0)
+
+    internal var coordinates: LayoutCoordinates? = null
+
+    /** Current position of the focused element, read on demand. */
+    fun rect(): Rect? = coordinates?.takeIf { it.isAttached }?.boundsInWindow()
 }
 
 /**
@@ -95,17 +102,15 @@ fun FocusSurface(
         onLongClick = onLongClick,
         modifier = modifier
             .then(
-                if (FocusTracker.enabled) Modifier.onGloballyPositioned {
-                    coordinates[0] = it
-                    if (focused) FocusTracker.rect = it.boundsInWindow()
-                } else Modifier
+                if (FocusTracker.enabled) Modifier.onGloballyPositioned { coordinates[0] = it } else Modifier
             )
             .onFocusChanged {
                 if (it.isFocused != focused) {
                     focused = it.isFocused
                     if (it.isFocused) {
                         if (FocusTracker.enabled) {
-                            coordinates[0]?.takeIf { c -> c.isAttached }?.let { c -> FocusTracker.rect = c.boundsInWindow() }
+                            FocusTracker.coordinates = coordinates[0]
+                            FocusTracker.tick++
                         }
                         onFocus?.invoke()
                     }

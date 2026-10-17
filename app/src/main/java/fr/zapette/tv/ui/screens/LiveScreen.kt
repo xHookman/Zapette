@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -38,6 +39,8 @@ fun LiveScreen(vm: AppViewModel) {
     }
     val target = vm.liveFocusId ?: vm.store.lastChannelId ?: channels.first().id
 
+    LaunchedEffect(Unit) { vm.backdrop = null }
+
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp, bottom = 18.dp), verticalAlignment = Alignment.Bottom) {
             Text("Chaînes en direct", style = ZType.Headline, color = Z.Text)
@@ -58,10 +61,8 @@ fun LiveScreen(vm: AppViewModel) {
                     programme = epg[c.xmltvId]?.firstOrNull { it.isOnAt(now) },
                     now = now,
                     onClick = { vm.watch(c) },
-                    onFocus = {
-                        vm.liveFocusId = c.id
-                        vm.backdrop = epg[c.xmltvId]?.firstOrNull { it.isOnAt(now) }?.icon?.ifBlank { null } ?: c.fanart
-                    },
+                    // No ambient artwork behind this dense grid: it made scrolling heavy
+                    onFocus = { vm.liveFocusId = c.id },
                     modifier = Modifier.restoreFocus(vm.restorePending && c.id == target) { vm.restorePending = false },
                 )
             }

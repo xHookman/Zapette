@@ -50,6 +50,7 @@ import fr.zapette.tv.ui.components.TopBar
 import fr.zapette.tv.ui.components.Toasts
 import fr.zapette.tv.ui.components.ZImage
 import androidx.compose.runtime.key
+import androidx.compose.ui.platform.LocalView
 import fr.zapette.tv.ui.player.LiveVideoLayer
 import fr.zapette.tv.ui.player.PlayerScreen
 import fr.zapette.tv.ui.screens.BrowseScreen
@@ -64,6 +65,16 @@ import fr.zapette.tv.ui.theme.ZapetteTheme
 class MainActivity : ComponentActivity() {
 
     private val vm: AppViewModel by viewModels()
+
+    override fun onStop() {
+        super.onStop()
+        vm.onAppStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        vm.onAppStart()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,6 +121,8 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
 
     // Typing a channel number anywhere outside the player zaps to it, like a TV
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    val doubleOk = remember { DoubleOk(scope, view) { vm.expandMini() } }
     var typed by remember { mutableStateOf("") }
     var typedJob by remember { mutableStateOf<Job?>(null) }
     fun commit() {
@@ -133,6 +146,10 @@ private fun MainScaffold(vm: AppViewModel, onExit: () -> Unit) {
                         code == android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
             ) {
                 vm.expandMini()
+                return@onPreviewKeyEvent true
+            }
+            // OK twice quickly, wherever the focus is: back to the channel in the corner
+            if (vm.miniLive && top !is Route.Player && doubleOk.handle(e.nativeKeyEvent)) {
                 return@onPreviewKeyEvent true
             }
             if (digit < 0 || top is Route.Player) return@onPreviewKeyEvent false
@@ -221,5 +238,81 @@ fun Backdrop(url: String?) {
             url, Modifier.fillMaxWidth(0.7f).fillMaxHeight(0.75f).align(Alignment.TopEnd),
             contentScale = ContentScale.Crop, placeholder = Color.Transparent, alpha = 0.55f,
         )
+    }
+}
+
+/**
+ * "OK" pressed twice quickly (like TV Mate) brings the mini-player channel back.
+ *
+ * While the mini-player is shown, the first OK is held back for a fraction of a
+ * second: if a second OK follows, it is a double press; otherwise the held key
+ * events are replayed so the focused item reacts normally (click or long press).
+ */
+class DoubleOk(
+    private val scope: kotlinx.coroutines.CoroutineScope,
+    private val view: android.view.View,
+    private val onDouble: () -> Unit,
+) {
+    private var heldDown: android.view.KeyEvent? = null
+    private var heldUp: android.view.KeyEvent? = null
+    private var swallowNextUp = false
+    private var replaying = false
+    private var timer: Job? = null
+
+    private fun isOk(code: Int) = code == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
+        code == android.view.KeyEvent.KEYCODE_ENTER || code == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+
+    /** Returns true when the event is consumed. */
+    fun handle(e: android.view.KeyEvent): Boolean {
+        if (replaying || !isOk(e.keyCode)) return false
+        val down = e.action == android.view.KeyEvent.ACTION_DOWN
+        if (swallowNextUp && !down) {
+            swallowNextUp = false
+            return true
+        }
+        val pending = heldDown
+        if (down) {
+            if (e.repeatCount > 0) {
+                // Long press: give the held press back at once
+                if (pending != null) replay()
+                return false
+            }
+            if (pending != null) {
+                // Second press: double OK
+                timer?.cancel()
+                heldDown = null
+                heldUp = null
+                swallowNextUp = true
+                onDouble()
+                return true
+            }
+            heldDown = android.view.KeyEvent(e)
+            timer = scope.launch {
+                delay(260)
+                replay()
+            }
+            return true
+        }
+        // Key released while the first press is still held back
+        if (pending != null) {
+            heldUp = android.view.KeyEvent(e)
+            return true
+        }
+        return false
+    }
+
+    private fun replay() {
+        timer?.cancel()
+        val d = heldDown ?: return
+        val u = heldUp
+        heldDown = null
+        heldUp = null
+        replaying = true
+        try {
+            view.dispatchKeyEvent(d)
+            if (u != null) view.dispatchKeyEvent(u)
+        } finally {
+            replaying = false
+        }
     }
 }

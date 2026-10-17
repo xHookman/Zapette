@@ -47,6 +47,9 @@ private val CardShape = RoundedCornerShape(12.dp)
 /** Requests focus on this element when it is the one to restore. */
 @Composable
 fun Modifier.restoreFocus(isTarget: Boolean, onRestored: () -> Unit = {}): Modifier {
+    // Only the item that must take the focus pays for a requester and an effect
+    // (this modifier is on every card of every list)
+    if (!isTarget) return this
     val requester = remember { FocusRequester() }
     LaunchedEffect(isTarget) {
         if (isTarget) {

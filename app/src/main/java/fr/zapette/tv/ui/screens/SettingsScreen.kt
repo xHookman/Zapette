@@ -138,6 +138,10 @@ fun SettingsScreen(vm: AppViewModel) {
                 description = "Affiche la chaîne et le programme en cours à chaque changement de chaîne.") {
                 vm.store.bannerOnZap = !vm.store.bannerOnZap; revision++
             },
+            Row2.Item("Effet de zapping rétro", toggle = vm.store.zapEffect,
+                description = "Neige et numéro de chaîne vert façon vieux téléviseur pendant le changement de chaîne.") {
+                vm.store.zapEffect = !vm.store.zapEffect; revision++
+            },
             Row2.Item("Mini-lecteur en quittant le direct", toggle = vm.store.miniOnBack,
                 description = "Retour depuis une chaîne la garde à l'écran, en haut à droite, pendant que vous parcourez les menus. " +
                     "Choisir une chaîne la remplace en plein écran ; Lecture revient en plein écran ; Retour (à l'accueil) la ferme.") {

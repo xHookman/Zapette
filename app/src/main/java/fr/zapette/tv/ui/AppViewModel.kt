@@ -21,7 +21,9 @@ import fr.zapette.tv.data.PluginItem
 import fr.zapette.tv.data.PluginResult
 import fr.zapette.tv.data.Programme
 import fr.zapette.tv.data.ResumeEntry
+import fr.zapette.tv.data.SelectedItem
 import fr.zapette.tv.data.Stream
+import fr.zapette.tv.data.ZapetteJson
 import androidx.media3.exoplayer.ExoPlayer
 import fr.zapette.tv.player.StreamPlayer
 import kotlinx.coroutines.Job
@@ -280,6 +282,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         sharedLivePlayer?.release()
         sharedLivePlayer = null
     }
+
+    // ---------------------------------------------------------- app background
+    private var stoppedAt = 0L
+
+    /** Incremented when the live channel must be tuned again (watched by the player screen). */
+    var liveRestartTick by mutableIntStateOf(0)
+        private set
+
+    /** App leaves the screen (TV standby, Home button): stop the live stream entirely. */
+    fun onAppStop() {
+        stoppedAt = System.currentTimeMillis()
+        sharedLivePlayer?.stop()
+    }
+
+    /**
+     * Back on screen: the live stream is fetched again (new address and tokens), so
+     * the picture is the programme on air now and not where it stopped yesterday.
+     */
+    fun onAppStart() {
+        if (stoppedAt == 0L) return
+        stoppedAt = 0L
+        val player = sharedLivePlayer ?: return
+        val top = stack.lastOrNull()
+        if (top is Route.Player && top.request is PlayerRequest.Live) {
+            liveRestartTick++
+        } else if (miniLive) {
+            val channel = channel(liveChannelId) ?: return stopLive()
+            viewModelScope.launch {
+                val result = engine.invoke(channel.url, selectedJson(channel))
+                val stream = result.stream
+                if (result.kind == "resolved" && stream != null && sharedLivePlayer === player) {
+                    StreamPlayer.load(getApplication<Application>(), player, stream, 0, subtitlesOn)
+                } else if (sharedLivePlayer === player) {
+                    stopLive()
+                }
+            }
+        }
+    }
+
+    fun selectedJson(c: Channel): String = ZapetteJson.encodeToString(
+        SelectedItem.serializer(),
+        SelectedItem(c.label, c.url, mapOf("thumb" to c.logo, "fanart" to c.fanart), mapOf("title" to c.label, "plot" to "")),
+    )
 
     /** Full screen again on the channel playing in the corner. */
     fun expandMini() {

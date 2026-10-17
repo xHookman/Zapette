@@ -38,6 +38,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("mini_on_back", true)
         set(value) = prefs.edit().putBoolean("mini_on_back", value).apply()
 
+    /** Old-TV "snow" effect when changing channel. */
+    var zapEffect: Boolean
+        get() = prefs.getBoolean("zap_effect", true)
+        set(value) = prefs.edit().putBoolean("zap_effect", value).apply()
+
     /** Light mode for weak TVs: auto | on | off (applied at next start). */
     var perfMode: String
         get() = prefs.getString("perf_mode", "auto") ?: "auto"

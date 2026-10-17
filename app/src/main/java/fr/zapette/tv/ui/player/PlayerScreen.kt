@@ -123,6 +123,9 @@ private class PlayerUi {
     var zapList by mutableStateOf(false)
     var info by mutableStateOf(false)
     var number by mutableStateOf("")
+    /** Retro "snow" while changing channel, until the first picture. */
+    var zapFx by mutableStateOf(false)
+    var zapStartedAt = 0L
 
     // vod
     var controls by mutableStateOf(true)
@@ -146,6 +149,7 @@ private class PlayerJobs {
 private class PlayerActions {
     var retry: () -> Unit = {}
     var redetect: () -> Unit = {}
+    var firstFrame: () -> Unit = {}
     /** Last stream sent to the player, and whether its format was already re-checked. */
     var stream: Stream? = null
     var redetected = false
@@ -184,6 +188,10 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
             ui.playing = isPlaying
         }
 
+        override fun onRenderedFirstFrame() {
+            actions.firstFrame()
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                 exo.seekToDefaultPosition(); exo.prepare(); return
@@ -193,6 +201,7 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
             // A live stream may drop: retry once silently
             if (isLive && ui.attempts == 0 && error.errorCode in NETWORK_ERRORS) { actions.retry(); return }
             ui.loading = false
+            ui.zapFx = false
             ui.error = friendlyError(error)
         }
     } }
@@ -224,6 +233,10 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     }
 
     fun tune(channel: Channel, immediate: Boolean) {
+        if (vm.store.zapEffect) {
+            ui.zapStartedAt = System.currentTimeMillis()
+            ui.zapFx = true
+        }
         ui.shownId = channel.id
         ui.error = null
         if (vm.store.bannerOnZap || !immediate) showBanner()
@@ -358,6 +371,21 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
         }
     }
     actions.retry = { retry() }
+    actions.firstFrame = {
+        if (ui.zapFx) scope.launch {
+            // Keep the snow visible a moment even when the channel starts instantly
+            delay((380 - (System.currentTimeMillis() - ui.zapStartedAt)).coerceAtLeast(0))
+            ui.zapFx = false
+        }
+    }
+
+    // Back from standby / another app: tune in again to get the programme on air now
+    if (isLive) {
+        val startTick = remember { vm.liveRestartTick }
+        LaunchedEffect(vm.liveRestartTick) {
+            if (vm.liveRestartTick != startTick) vm.channel(ui.tunedId ?: ui.shownId)?.let { tune(it, true) }
+        }
+    }
     actions.redetect = {
         val s = actions.stream
         actions.redetected = true
@@ -457,8 +485,8 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> { saveResume(); exo.pause() }
-                Lifecycle.Event.ON_START -> if (isLive) { exo.seekToDefaultPosition(); exo.play() }
+                // Live: the ViewModel stops the stream and tunes in again at return (fresh "now")
+                Lifecycle.Event.ON_STOP -> if (!isLive) { saveResume(); exo.pause() }
                 else -> Unit
             }
         }
@@ -573,8 +601,10 @@ fun PlayerScreen(vm: AppViewModel, request: PlayerRequest, onClose: () -> Unit) 
 
         val shown = vm.channel(ui.shownId)
 
-        // Loading
-        if (ui.loading && ui.error == null) {
+        // Channel change: old-TV snow until the first picture
+        if (isLive && ui.zapFx && ui.error == null) {
+            ZapStatic(shown)
+        } else if (ui.loading && ui.error == null) {
             Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (isLive && shown != null) {

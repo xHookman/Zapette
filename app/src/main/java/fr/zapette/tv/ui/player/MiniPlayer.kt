@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,10 +72,11 @@ fun LiveVideoLayer(vm: AppViewModel, fullscreen: Boolean) {
         val miniX = maxWidth - MiniMargin - MiniWidth
         val bottomY = maxHeight - MiniMargin - MiniHeight
 
-        // Dodge the focused element
-        val focus = FocusTracker.rect
-        LaunchedEffect(focus, fullscreen) {
-            if (fullscreen || focus == null) return@LaunchedEffect
+        // Dodge the focused element, once the list has finished scrolling to it
+        LaunchedEffect(FocusTracker.tick, fullscreen) {
+            if (fullscreen) return@LaunchedEffect
+            delay(250)
+            val focus = FocusTracker.rect() ?: return@LaunchedEffect
             fun rect(y: Dp) = with(density) {
                 Rect(miniX.toPx(), y.toPx(), (miniX + MiniWidth).toPx(), (y + MiniHeight).toPx())
             }
@@ -99,18 +101,6 @@ fun LiveVideoLayer(vm: AppViewModel, fullscreen: Boolean) {
         val w by animateDpAsState(if (fullscreen) maxWidth else MiniWidth, spec, label = "w")
         val h by animateDpAsState(if (fullscreen) maxHeight else MiniHeight, spec, label = "h")
 
-        val lifecycle = LocalLifecycleOwner.current.lifecycle
-        DisposableEffect(lifecycle, player) {
-            val observer = LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_STOP -> player.pause()
-                    Lifecycle.Event.ON_START -> { player.seekToDefaultPosition(); player.play() }
-                    else -> Unit
-                }
-            }
-            lifecycle.addObserver(observer)
-            onDispose { lifecycle.removeObserver(observer) }
-        }
 
         val shape = RoundedCornerShape(if (fullscreen) 0.dp else 8.dp)
         Box(
