@@ -142,6 +142,10 @@ fun SettingsScreen(vm: AppViewModel) {
                 description = "Neige et numéro de chaîne vert façon vieux téléviseur pendant le changement de chaîne.") {
                 vm.store.zapEffect = !vm.store.zapEffect; revision++
             },
+            Row2.Item("Grésillement pendant la neige", toggle = vm.store.zapSound,
+                description = "Léger souffle de téléviseur non réglé pendant l'effet de zapping.") {
+                vm.store.zapSound = !vm.store.zapSound; revision++
+            },
             Row2.Item("Mini-lecteur en quittant le direct", toggle = vm.store.miniOnBack,
                 description = "Retour depuis une chaîne la garde à l'écran, en haut à droite, pendant que vous parcourez les menus. " +
                     "Choisir une chaîne la remplace en plein écran ; Lecture revient en plein écran ; Retour (à l'accueil) la ferme.") {

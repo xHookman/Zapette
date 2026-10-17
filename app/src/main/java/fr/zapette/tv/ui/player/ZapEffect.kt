@@ -18,8 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -65,8 +63,6 @@ private object Snow {
     }
 }
 
-private val Vignette = Brush.radialGradient(0.5f to Color.Transparent, 1f to Color(0xCC000000))
-
 private val Osd = TextStyle(
     fontFamily = FontFamily.Monospace,
     fontWeight = FontWeight.Bold,
@@ -95,6 +91,13 @@ fun ZapStatic(channel: Channel?, modifier: Modifier = Modifier) {
         }
     }
     val matrix = remember { Matrix() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Soft analog hiss while the snow is on screen
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val store = (context.applicationContext as fr.zapette.tv.ZapetteApplication).store
+        if (store.zapSound) ZapHiss.start()
+        onDispose { ZapHiss.stop() }
+    }
     Box(modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             // Reading `frame` here only redraws the canvas, without recomposition
@@ -106,16 +109,6 @@ fun ZapStatic(channel: Channel?, modifier: Modifier = Modifier) {
             paint.shader.setLocalMatrix(matrix)
             drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint) }
 
-            // A faint bright band rolling down the screen
-            val bandY = (frame * 14f) % (size.height + 200f) - 100f
-            drawRect(
-                Brush.verticalGradient(
-                    0f to Color.Transparent, 0.5f to Color(0x22FFFFFF), 1f to Color.Transparent,
-                    startY = bandY, endY = bandY + 120f,
-                ),
-                topLeft = Offset(0f, bandY), size = androidx.compose.ui.geometry.Size(size.width, 120f),
-            )
-            drawRect(Vignette)
         }
         if (channel != null) {
             Column(Modifier.align(Alignment.TopStart).padding(top = 36.dp, start = 56.dp)) {

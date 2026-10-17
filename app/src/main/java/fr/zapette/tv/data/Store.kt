@@ -43,6 +43,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("zap_effect", true)
         set(value) = prefs.edit().putBoolean("zap_effect", value).apply()
 
+    /** Soft hiss played with the snow effect. */
+    var zapSound: Boolean
+        get() = prefs.getBoolean("zap_sound", true)
+        set(value) = prefs.edit().putBoolean("zap_sound", value).apply()
+
     /** Light mode for weak TVs: auto | on | off (applied at next start). */
     var perfMode: String
         get() = prefs.getString("perf_mode", "auto") ?: "auto"
