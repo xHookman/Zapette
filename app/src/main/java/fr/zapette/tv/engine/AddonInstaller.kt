@@ -70,28 +70,50 @@ class AddonInstaller(private val context: Context) {
         installZip(CATCHUP_ID, bytes.inputStream(), "github:${System.currentTimeMillis()}")
     }
 
+    /** Downloads a file from GitHub: HTTPS only, size limited. */
     private fun download(url: String): ByteArray {
         var target = url
         repeat(5) {
             val conn = (URL(target).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout = 60_000
-                instanceFollowRedirects = true
+                instanceFollowRedirects = false   // followed by hand, to refuse plain http
                 setRequestProperty("User-Agent", "Zapette/${BuildConfig.VERSION_NAME}")
             }
             try {
                 val code = conn.responseCode
                 if (code in 300..399) {
-                    target = conn.getHeaderField("Location") ?: error("Redirection invalide")
+                    val location = conn.getHeaderField("Location") ?: error("Redirection invalide")
+                    target = URL(URL(target), location).toString()
+                    if (!target.startsWith("https://")) error("Redirection non sécurisée refusée")
                     return@repeat
                 }
                 if (code != 200) error("Téléchargement impossible (HTTP $code)")
-                return conn.inputStream.use { it.readBytes() }
+                return conn.inputStream.use { it.readLimited(MAX_DOWNLOAD) }
             } finally {
                 conn.disconnect()
             }
         }
         error("Trop de redirections")
+    }
+
+    private fun InputStream.readLimited(limit: Long): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        copyLimited(out, limit)
+        return out.toByteArray()
+    }
+
+    /** Copies at most [limit] bytes: a damaged or hostile archive cannot fill the storage. */
+    private fun InputStream.copyLimited(out: java.io.OutputStream, limit: Long): Long {
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val n = read(buffer)
+            if (n < 0) return total
+            total += n
+            require(total <= limit) { "Archive anormalement grosse" }
+            out.write(buffer, 0, n)
+        }
     }
 
     /**
@@ -101,14 +123,18 @@ class AddonInstaller(private val context: Context) {
     private fun installZip(id: String, input: InputStream, stamp: String) {
         val tmp = File(addonsDir, ".$id.tmp").apply { deleteRecursively(); mkdirs() }
         val canonicalTmp = tmp.canonicalPath + File.separator
+        var extracted = 0L
+        var files = 0
         ZipInputStream(input.buffered()).use { zis ->
             var entry = zis.nextEntry
             while (entry != null) {
                 val out = File(tmp, entry.name)
+                // "Zip slip": an entry must not escape the target folder (../../)
                 require(out.canonicalPath.startsWith(canonicalTmp)) { "Archive invalide" }
                 if (entry.isDirectory) out.mkdirs() else {
+                    require(++files <= MAX_FILES) { "Archive invalide (trop de fichiers)" }
                     out.parentFile?.mkdirs()
-                    out.outputStream().use { zis.copyTo(it) }
+                    extracted += out.outputStream().use { zis.copyLimited(it, MAX_EXTRACTED - extracted) }
                 }
                 entry = zis.nextEntry
             }
@@ -141,5 +167,8 @@ class AddonInstaller(private val context: Context) {
         private const val REMOTE_ADDON_XML =
             "https://raw.githubusercontent.com/Catch-up-TV-and-More/plugin.video.catchuptvandmore/master/addon.xml"
         private val VERSION_RE = Regex("version=\"([^\"]+)\"")
+        private const val MAX_DOWNLOAD = 100L * 1024 * 1024
+        private const val MAX_EXTRACTED = 300L * 1024 * 1024
+        private const val MAX_FILES = 20_000
     }
 }

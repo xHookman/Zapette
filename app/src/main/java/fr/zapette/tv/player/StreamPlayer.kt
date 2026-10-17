@@ -10,6 +10,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -173,7 +174,7 @@ object StreamPlayer {
     }
 
     /** Shows or hides subtitles (French first) on a player, at any time. */
-    fun applySubtitles(player: ExoPlayer, on: Boolean) {
+    fun applySubtitles(player: Player, on: Boolean) {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !on)
             .setPreferredTextLanguage("fr")

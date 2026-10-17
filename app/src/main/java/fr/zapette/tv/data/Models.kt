@@ -112,7 +112,6 @@ data class Stream(
     val label: String = "",
     val art: Map<String, String> = emptyMap(),
     val info: ItemInfo = ItemInfo(),
-    @SerialName("is_live") val isLive: Boolean = false,
 )
 
 @Serializable
@@ -137,6 +136,12 @@ data class Channel(
     @SerialName("xmltv_id") val xmltvId: String = "",
     val group: String = "",
     val number: Int = 0,
+)
+
+/** What the add-on sees as "the selected item" when this channel is opened. */
+fun Channel.selectedJson(): String = ZapetteJson.encodeToString(
+    SelectedItem.serializer(),
+    SelectedItem(label, url, mapOf("thumb" to logo, "fanart" to fanart), mapOf("title" to label, "plot" to "")),
 )
 
 @Serializable

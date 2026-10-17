@@ -32,23 +32,17 @@ android {
         }
     }
 
-    // Every build must be signed with the same key, otherwise Android refuses the
-    // in-app update. The repository key (zapette-release.jks) is used unless your
-    // own keystore is provided through environment variables / GitHub secrets.
-    val ownKeystore = System.getenv("ZAPETTE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    // Releases are signed with the private Zapette key, given by the CI through
+    // environment variables (GitHub secrets, never stored in the repository).
+    // Android only installs an update signed with the same key as the installed app.
+    // Without these variables (a local build), the release uses the debug key.
+    val keystore = System.getenv("ZAPETTE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
     signingConfigs {
-        create("release") {
-            if (ownKeystore != null) {
-                storeFile = ownKeystore
-                storePassword = System.getenv("ZAPETTE_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ZAPETTE_KEY_ALIAS")
-                keyPassword = System.getenv("ZAPETTE_KEY_PASSWORD")
-            } else {
-                storeFile = file("zapette-release.jks")
-                storePassword = "zapette-tv"
-                keyAlias = "zapette"
-                keyPassword = "zapette-tv"
-            }
+        if (keystore != null) create("zapette") {
+            storeFile = keystore
+            storePassword = System.getenv("ZAPETTE_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ZAPETTE_KEY_ALIAS")
+            keyPassword = System.getenv("ZAPETTE_KEY_PASSWORD")
         }
     }
 
@@ -58,10 +52,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("zapette") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -119,8 +110,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-core")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("androidx.tv:tv-material:1.0.0")
 

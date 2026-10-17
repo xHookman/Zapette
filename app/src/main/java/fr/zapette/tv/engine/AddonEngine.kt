@@ -18,58 +18,52 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Executors
 
 /**
- * Runs Catch-up TV & More inside an embedded Python interpreter.
+ * Runs Catch-up TV & More inside an embedded Python interpreter
+ * (Python side: app/src/main/python/zapette_kodi/bridge.py).
  *
- * All add-on calls go through one dedicated thread (the add-on and codequick
- * keep global state, exactly like inside Kodi). The EPG has its own thread so
- * that downloading the guide never delays a channel change.
+ * All add-on calls go through one thread, as in Kodi (the add-on keeps global
+ * state). The TV guide has its own thread, so parsing it never delays a channel.
  */
 class AddonEngine(private val context: Context) {
 
     val host = PythonHost()
     val installer = AddonInstaller(context)
 
-    private val addonThread = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "catchup-addon").apply { priority = Thread.NORM_PRIORITY + 1 }
-    }.asCoroutineDispatcher()
-    private val epgThread = Executors.newSingleThreadExecutor { r -> Thread(r, "catchup-epg") }
-        .asCoroutineDispatcher()
+    private val addonThread = Executors.newSingleThreadExecutor { Thread(it, "catchup-addon") }.asCoroutineDispatcher()
+    private val guideThread = Executors.newSingleThreadExecutor { Thread(it, "catchup-guide") }.asCoroutineDispatcher()
+    private val guideCache = File(context.cacheDir, "guide")
 
     private lateinit var bridge: PyObject
 
-    @Volatile
-    var addonVersion: String = ""
-        private set
-
-    /** Extracts the add-ons and boots Python. Safe to call more than once. */
+    /** Extracts the add-ons if needed and starts Python. Safe to call again. */
     suspend fun start() = withContext(addonThread) {
         if (::bridge.isInitialized) return@withContext
         installer.ensureInstalled()
         if (!Python.isStarted()) Python.start(AndroidPlatform(context))
         val module = Python.getInstance().getModule("zapette_kodi.bridge")
-        val json = module.callAttr(
-            "init", installer.home.absolutePath, "fr_fr", TimeZone.getDefault().id, host
-        ).toString()
-        Log.i(TAG, "Engine ready: $json")
+        module.callAttr("init", installer.home.absolutePath, "fr_fr", TimeZone.getDefault().id, host)
         bridge = module
-        addonVersion = installer.installedVersion()
     }
 
     private fun call(name: String, vararg args: Any?): String = bridge.callAttr(name, *args).toString()
 
-    /** Runs the add-on for a plugin:// url (menu, playable item, script…). */
+    // ----------------------------------------------------------------- add-on
+    /** Runs the add-on for a plugin:// url (folder, playable item, script…). */
     suspend fun invoke(url: String, selectedJson: String = ""): PluginResult = withContext(addonThread) {
-        val raw = try {
-            call("invoke", url, selectedJson)
+        try {
+            ZapetteJson.decodeFromString(PluginResult.serializer(), call("invoke", url, selectedJson))
         } catch (t: Throwable) {
             Log.e(TAG, "invoke failed", t)
-            return@withContext PluginResult(kind = "error", url = url, error = t.message ?: t.toString())
+            PluginResult(kind = "error", url = url, error = t.message ?: t.toString())
         }
-        ZapetteJson.decodeFromString(PluginResult.serializer(), raw)
     }
 
     suspend fun menuUrl(menuId: String): String = withContext(addonThread) { call("menu_url", menuId) }
@@ -82,20 +76,41 @@ class AddonEngine(private val context: Context) {
         ZapetteJson.decodeFromString(ListSerializer(Country.serializer()), call("live_countries"))
     }
 
-    suspend fun epg(countryId: String, dayDelta: Int): Map<String, List<Programme>> = withContext(epgThread) {
-        val raw = runCatching { call("epg", countryId, dayDelta) }.getOrElse {
-            Log.w(TAG, "EPG failed", it); "{}"
+    // -------------------------------------------------------------- TV guide
+    /**
+     * Guide of one day (0 today, 1 tomorrow). Parsed once per day by Python, then
+     * kept as JSON on disk: restarting the app does not parse it again.
+     */
+    suspend fun guide(countryId: String, dayDelta: Int): Map<String, List<Programme>> = withContext(guideThread) {
+        val day = Date(System.currentTimeMillis() + dayDelta * 86_400_000L)
+        val file = File(guideCache, "${countryId}_${SimpleDateFormat("yyyyMMdd", Locale.US).format(day)}.json")
+        val json = if (file.exists()) {
+            file.readText()
+        } else {
+            runCatching { call("epg", countryId, dayDelta) }
+                .onFailure { Log.w(TAG, "guide failed", it) }
+                .getOrDefault("{}")
+                .also { if (it.length > 2) saveGuide(file, it) }
         }
-        ZapetteJson.decodeFromString(
-            MapSerializer(String.serializer(), ListSerializer(Programme.serializer())), raw
-        )
+        runCatching { ZapetteJson.decodeFromString(GUIDE, json) }.getOrDefault(emptyMap())
     }
 
+    private fun saveGuide(file: File, json: String) {
+        guideCache.mkdirs()
+        // keep only the files of today and tomorrow
+        val keep = (0..1).map { SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(System.currentTimeMillis() + it * 86_400_000L)) }
+        guideCache.listFiles()?.filter { f -> keep.none { f.name.contains(it) } }?.forEach { it.delete() }
+        file.writeText(json)
+    }
+
+    // ---------------------------------------------------------------- settings
     suspend fun settingsSchema(): List<SettingCategory> = withContext(addonThread) {
         ZapetteJson.decodeFromString(ListSerializer(SettingCategory.serializer()), call("settings_schema"))
     }
 
-    suspend fun setSetting(id: String, value: String) = withContext(addonThread) { call("set_setting", id, value) }
+    suspend fun setSetting(id: String, value: String) {
+        withContext(addonThread) { call("set_setting", id, value) }
+    }
 
     suspend fun getSetting(id: String): String = withContext(addonThread) { call("get_setting", id) }
 
@@ -105,14 +120,20 @@ class AddonEngine(private val context: Context) {
             .getOrElse { AccountCheck("network", it.message ?: "") }
     }
 
-    suspend fun clearCache() = withContext(addonThread) { call("clear_cache") }
+    /** Web cache of the add-on and TV guides. */
+    suspend fun clearCache() {
+        withContext(addonThread) { call("clear_cache") }
+        withContext(guideThread) { guideCache.deleteRecursively() }
+    }
 
-    /** Downloads the latest add-on from GitHub and reloads it. Returns the new version. */
+    // ---------------------------------------------------------- add-on update
+    /** Installs the latest add-on from GitHub. Returns the new version. */
     suspend fun updateAddon(): String {
         withContext(Dispatchers.IO) { installer.updateFromGitHub() }
         return reload()
     }
 
+    /** Back to the add-on bundled with the app. */
     suspend fun revertAddon(): String {
         withContext(Dispatchers.IO) { installer.reinstallBundled() }
         return reload()
@@ -120,13 +141,14 @@ class AddonEngine(private val context: Context) {
 
     private suspend fun reload(): String = withContext(addonThread) {
         call("reload_addon")
-        addonVersion = installer.installedVersion()
-        addonVersion
+        withContext(guideThread) { guideCache.deleteRecursively() }
+        installer.installedVersion()
     }
 
     suspend fun remoteVersion(): String? = withContext(Dispatchers.IO) { installer.remoteVersion() }
 
-    companion object {
-        private const val TAG = "AddonEngine"
+    private companion object {
+        const val TAG = "AddonEngine"
+        val GUIDE = MapSerializer(String.serializer(), ListSerializer(Programme.serializer()))
     }
 }

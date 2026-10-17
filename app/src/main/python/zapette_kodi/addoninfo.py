@@ -172,7 +172,7 @@ def _settings_file(addon_id):
     return os.path.join(runtime.addon_profile(addon_id), "settings.json")
 
 
-def _load(addon_id):
+def load_settings(addon_id):
     if addon_id not in _settings_cache:
         values = {}
         try:
@@ -185,7 +185,7 @@ def _load(addon_id):
 
 
 def get_setting(addon_id, key):
-    values = _load(addon_id)
+    values = load_settings(addon_id)
     if key in values:
         return values[key]
     return setting_defaults(addon_id).get(key, "")
@@ -194,7 +194,7 @@ def get_setting(addon_id, key):
 def set_setting(addon_id, key, value):
     if isinstance(value, bool):
         value = "true" if value else "false"
-    values = _load(addon_id)
+    values = load_settings(addon_id)
     values[key] = "%s" % value
     folder = runtime.addon_profile(addon_id)
     if not os.path.isdir(folder):

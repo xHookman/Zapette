@@ -55,7 +55,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import fr.zapette.tv.Images
 import fr.zapette.tv.Perf
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
@@ -168,6 +168,10 @@ fun ZButton(
     }
 }
 
+/**
+ * A programme or episode picture, decoded at [widthPx] (never at full resolution,
+ * which is what makes weak TVs stutter while scrolling).
+ */
 @Composable
 fun ZImage(
     url: String?,
@@ -175,11 +179,12 @@ fun ZImage(
     contentScale: ContentScale = ContentScale.Crop,
     placeholder: Color = Z.Surface2,
     alpha: Float = 1f,
+    widthPx: Int = 480,
 ) {
     Box(modifier.background(placeholder)) {
         if (!url.isNullOrBlank()) {
             val context = LocalContext.current
-            val request = remember(url) { ImageRequest.Builder(context).data(url).crossfade(!Perf.lite).build() }
+            val request = remember(url, widthPx) { Images.picture(context, url, widthPx) }
             AsyncImage(
                 model = request,
                 contentDescription = null,
@@ -191,7 +196,7 @@ fun ZImage(
     }
 }
 
-/** Channel logo on a soft rounded tile (logos are transparent PNGs). */
+/** Channel logo on a soft rounded tile (logos are transparent PNGs, always decoded at one size). */
 @Composable
 fun ChannelLogo(url: String, modifier: Modifier = Modifier, size: Dp = 56.dp, background: Color = Color(0x22FFFFFF)) {
     Box(
@@ -199,8 +204,10 @@ fun ChannelLogo(url: String, modifier: Modifier = Modifier, size: Dp = 56.dp, ba
         contentAlignment = Alignment.Center,
     ) {
         if (url.isNotBlank()) {
+            val context = LocalContext.current
+            val request = remember(url) { Images.logo(context, url) }
             AsyncImage(
-                model = url, contentDescription = null, contentScale = ContentScale.Fit,
+                model = request, contentDescription = null, contentScale = ContentScale.Fit,
                 modifier = Modifier.padding(size * 0.14f).matchParentSize(),
             )
         }

@@ -1,15 +1,7 @@
-@file:OptIn(ExperimentalComposeUiApi::class)
-
 package fr.zapette.tv.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,22 +23,17 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -65,168 +52,19 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import fr.zapette.tv.engine.PythonHost
 import fr.zapette.tv.ui.AppViewModel
-import fr.zapette.tv.ui.Route
-import fr.zapette.tv.ui.player.MiniHeight
-import fr.zapette.tv.ui.Tab
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
 import kotlinx.coroutines.delay
 
-// ------------------------------------------------------------------ top bar
+/* Dialogs: lists to pick from, yes/no, messages and text input. */
 
-@Composable
-fun TopBar(vm: AppViewModel) {
-    val requesters = remember { Tab.entries.associateWith { FocusRequester() } }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = Z.Gutter, end = Z.Gutter, top = Z.GutterTop, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Wordmark()
-        Spacer(Modifier.width(36.dp))
-        Row(
-            Modifier
-                .focusProperties { enter = { requesters.getValue(vm.tab) } }
-                .focusGroup(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Tab.entries.filter { it != Tab.Settings }.forEach { tab ->
-                TabPill(tab.label, selected = vm.tab == tab, requester = requesters.getValue(tab),
-                    onFocus = { vm.previewTab(tab) }) { vm.selectTab(tab) }
-            }
-            Spacer(Modifier.width(18.dp))
-            TabPill(null, selected = vm.tab == Tab.Settings, requester = requesters.getValue(Tab.Settings),
-                onFocus = { vm.previewTab(Tab.Settings) }) {
-                vm.selectTab(Tab.Settings)
-            }
-        }
-        Spacer(Modifier.weight(1f))
-        Clock()
-    }
-}
-
-@Composable
-private fun TabPill(
-    label: String?,
-    selected: Boolean,
-    requester: FocusRequester,
-    onFocus: () -> Unit,
-    onSelect: () -> Unit,
-) {
-    FocusSurface(
-        onClick = onSelect,
-        onFocus = onFocus,  // like Google TV: resting on a tab shows it
-        modifier = Modifier.height(40.dp).focusRequester(requester),
-        shape = RoundedCornerShape(20.dp),
-        focusedScale = 1.04f,
-        container = if (selected) Color(0x24FFFFFF) else Color.Transparent,
-        focusedContainer = Color.White,
-        ring = false,
-    ) { focused ->
-        val color = when {
-            focused -> Color.Black
-            selected -> Z.Text
-            else -> Z.Muted
-        }
-        Box(Modifier.padding(horizontal = if (label == null) 10.dp else 18.dp).align(Alignment.Center)) {
-            if (label == null) {
-                Icon(Icons.Filled.Settings, contentDescription = "Réglages", tint = color, modifier = Modifier.size(22.dp))
-            } else {
-                Text(label, style = ZType.Label.copy(fontSize = 16.sp), color = color)
-            }
-        }
-    }
-}
-
-@Composable
-fun Wordmark(modifier: Modifier = Modifier) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(width = 30.dp, height = 22.dp).clip(RoundedCornerShape(6.dp)).background(Z.Live),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("⚡", fontSize = 12.sp, color = Color.White)
-        }
-        Spacer(Modifier.width(10.dp))
-        Text("zapette", style = ZType.Title.copy(fontSize = 22.sp, letterSpacing = (-0.3).sp), color = Z.Text)
-    }
-}
-
-// ------------------------------------------------------------------- toasts
-
-@Composable
-fun Toasts(vm: AppViewModel) {
-    val toasts by vm.toasts.collectAsState()
-    // Stay above the mini-player when it sits in the bottom-right corner
-    val miniBelow = vm.miniLive && vm.miniAtBottom && vm.stack.lastOrNull() !is Route.Player
-    Box(
-        Modifier.fillMaxSize().padding(end = Z.Gutter, bottom = if (miniBelow) 32.dp + MiniHeight + 12.dp else 32.dp),
-        contentAlignment = Alignment.BottomEnd,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.End) {
-            toasts.forEach { t ->
-                key(t.id) {
-                    var visible by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) { visible = true }
-                    AnimatedVisibility(visible, enter = slideInHorizontally { it / 2 } + fadeIn(), exit = fadeOut()) {
-                        Row(
-                            Modifier
-                                .width(420.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Z.Surface2)
-                                .border(1.dp, Z.Line, RoundedCornerShape(14.dp))
-                                .padding(horizontal = 18.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier.size(10.dp).clip(RoundedCornerShape(5.dp))
-                                    .background(if (t.kind == "error") Z.Live else Z.Gold)
-                            )
-                            Spacer(Modifier.width(14.dp))
-                            Column {
-                                if (t.title.isNotBlank()) Text(t.title, style = ZType.Label, color = Z.Text, maxLines = 2)
-                                if (t.message.isNotBlank()) Text(
-                                    t.message, style = ZType.Body.copy(fontSize = 13.sp), color = Z.Muted,
-                                    maxLines = 3, overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun BusyOverlay(vm: AppViewModel) {
-    val busy by vm.busy.collectAsState()
-    val progress by vm.engine.host.progress.collectAsState()
-    val message = progress ?: busy
-    AnimatedVisibility(message != null, enter = fadeIn(), exit = fadeOut()) {
-        Box(Modifier.fillMaxSize().padding(top = 28.dp), contentAlignment = Alignment.TopCenter) {
-            Row(
-                Modifier.clip(RoundedCornerShape(24.dp)).background(Z.Surface3).padding(horizontal = 18.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Spinner(size = 18.dp)
-                Spacer(Modifier.width(12.dp))
-                Text(message ?: "", style = ZType.Label, color = Z.Text)
-            }
-        }
-    }
-}
-
-// ------------------------------------------------------------------ dialogs
 
 /** Dialogs opened by the add-on (through PythonHost) and by the app itself. */
 @Composable
 fun AppDialogs(vm: AppViewModel) {
     val request by vm.engine.host.request.collectAsState()
-    val choice by vm.choice.collectAsState()
-    val textAsk by vm.textAsk.collectAsState()
+    val choice by vm.messages.choice.collectAsState()
+    val textAsk by vm.messages.textAsk.collectAsState()
 
     // key(): a new dialog gets fresh state (focus, scroll, checks)
     key(request, choice, textAsk) {
@@ -256,13 +94,13 @@ fun AppDialogs(vm: AppViewModel) {
                 when {
                     ask != null -> InputDialog(
                         title = ask.title, initial = ask.initial, hidden = ask.hidden, kind = "text",
-                        onDone = { value -> vm.askText(null); if (value != null) ask.onDone(value) },
+                        onDone = { value -> vm.messages.askText(null); if (value != null) ask.onDone(value) },
                     )
                     c != null -> SelectDialog(
                         title = c.title, options = c.options, preselect = c.selected, multi = c.multi,
-                        onDismiss = { vm.dismissChoice() },
-                        onPick = { vm.dismissChoice(); if (it >= 0) c.onPick(it) },
-                        onMulti = { vm.dismissChoice(); c.onMulti(it) },
+                        onDismiss = { vm.messages.dismissChoice() },
+                        onPick = { vm.messages.dismissChoice(); if (it >= 0) c.onPick(it) },
+                        onMulti = { vm.messages.dismissChoice(); c.onMulti(it) },
                     )
                 }
             }

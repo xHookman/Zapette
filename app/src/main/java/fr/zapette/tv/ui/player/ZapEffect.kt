@@ -91,13 +91,6 @@ fun ZapStatic(channel: Channel?, modifier: Modifier = Modifier) {
         }
     }
     val matrix = remember { Matrix() }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // Soft analog hiss while the snow is on screen
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        val store = (context.applicationContext as fr.zapette.tv.ZapetteApplication).store
-        if (store.zapSound) ZapHiss.start()
-        onDispose { ZapHiss.stop() }
-    }
     Box(modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             // Reading `frame` here only redraws the canvas, without recomposition

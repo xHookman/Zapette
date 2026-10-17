@@ -84,7 +84,10 @@ class AppUpdater(private val context: Context) {
             try {
                 val code = conn.responseCode
                 if (code in 300..399) {
-                    url = conn.getHeaderField("Location") ?: error("Redirection invalide")
+                    val location = conn.getHeaderField("Location") ?: error("Redirection invalide")
+                    url = URL(URL(url), location).toString()
+                    // Never leave HTTPS (GitHub serves release files from its own CDN)
+                    if (!url.startsWith("https://")) error("Redirection non sécurisée refusée")
                     return@repeat
                 }
                 if (code != 200) error("Téléchargement impossible (HTTP $code)")
@@ -99,6 +102,7 @@ class AppUpdater(private val context: Context) {
                             if (n < 0) break
                             out.write(buffer, 0, n)
                             done += n
+                            if (done > MAX_APK_BYTES) error("Fichier anormalement gros")
                             val pct = if (total > 0) (done * 100 / total).toInt() else 0
                             if (pct != last) { last = pct; onProgress(pct) }
                         }
@@ -145,7 +149,8 @@ class AppUpdater(private val context: Context) {
         val installed = pm.getPackageInfo(context.packageName, flags)
         val a = signatures(archive)
         val b = signatures(installed)
-        if (a.isNotEmpty() && b.isNotEmpty() && a != b) {
+        if (a.isEmpty() || b.isEmpty()) return "signature illisible"
+        if (a != b) {
             return "signature différente : désinstallez Zapette puis installez l'APK depuis GitHub"
         }
         return null
@@ -173,7 +178,7 @@ class AppUpdater(private val context: Context) {
     private fun open(url: String) = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 15_000
         readTimeout = 60_000
-        instanceFollowRedirects = true
+        instanceFollowRedirects = false   // redirections are followed by hand, HTTPS only
         setRequestProperty("User-Agent", "Zapette/${BuildConfig.VERSION_NAME}")
         setRequestProperty("Accept", "application/vnd.github+json, application/octet-stream")
     }
@@ -186,5 +191,9 @@ class AppUpdater(private val context: Context) {
         } finally {
             conn.disconnect()
         }
+    }
+
+    private companion object {
+        const val MAX_APK_BYTES = 400L * 1024 * 1024
     }
 }

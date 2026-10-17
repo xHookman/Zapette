@@ -29,9 +29,9 @@ import fr.zapette.tv.ui.theme.ZType
 /** All live channels, numbered like on a TV set. */
 @Composable
 fun LiveScreen(vm: AppViewModel) {
-    val channels by vm.channels.collectAsState()
-    val epg by vm.epg.collectAsState()
-    val now by vm.now.collectAsState()
+    val channels by vm.live.channels.collectAsState()
+    val epg by vm.live.guide.collectAsState()
+    val now by vm.live.now.collectAsState()
 
     if (channels.isEmpty()) {
         EmptyState("Aucune chaîne", "Choisissez un pays dans les réglages.")
@@ -49,7 +49,7 @@ fun LiveScreen(vm: AppViewModel) {
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
-            state = vm.liveGridState,
+            state = vm.liveGrid,
             contentPadding = PaddingValues(start = Z.Gutter, end = Z.Gutter, bottom = 48.dp, top = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -63,7 +63,7 @@ fun LiveScreen(vm: AppViewModel) {
                     onClick = { vm.watch(c) },
                     // No ambient artwork behind this dense grid: it made scrolling heavy
                     onFocus = { vm.liveFocusId = c.id },
-                    modifier = Modifier.restoreFocus(vm.restorePending && c.id == target) { vm.restorePending = false },
+                    modifier = Modifier.restoreFocus(vm.restoreFocus && c.id == target) { vm.restoreFocus = false },
                 )
             }
         }

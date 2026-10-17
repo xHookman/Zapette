@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import fr.zapette.tv.data.Channel
+import fr.zapette.tv.live.LiveTv
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.Hero
 import fr.zapette.tv.ui.components.ChannelLogo
@@ -49,10 +50,10 @@ private val RowPadding = PaddingValues(horizontal = 48.dp)
 
 @Composable
 fun HomeScreen(vm: AppViewModel) {
-    val channels by vm.channels.collectAsState()
-    val epg by vm.epg.collectAsState()
-    val now by vm.now.collectAsState()
-    val resume by vm.resume.collectAsState()
+    val channels by vm.live.channels.collectAsState()
+    val epg by vm.live.guide.collectAsState()
+    val now by vm.live.now.collectAsState()
+    val resume by vm.store.resume.collectAsState()
     val replay = vm.replayRoot
 
     LaunchedEffect(replay) {
@@ -70,7 +71,7 @@ fun HomeScreen(vm: AppViewModel) {
     if (vm.homeFocusKey == null) vm.homeFocusKey = "live:${channels.first().id}"
 
     fun liveHero(c: Channel) {
-        val p = vm.nowPlaying(c, now)
+        val p = vm.live.nowPlaying(c, now)
         vm.hero = Hero(
             kicker = c.label, live = true, title = p?.title ?: c.label,
             meta = listOfNotNull(
@@ -85,13 +86,14 @@ fun HomeScreen(vm: AppViewModel) {
 
     // Prime time of the main channels: computed once per guide update, not at each frame
     val tonight = remember(channels, epg) {
-        channels.filter { it.number in 1..27 }.mapNotNull { c -> vm.primeTime(c)?.let { c to it } }
+        channels.filter { it.number in 1..27 }.mapNotNull { c -> vm.live.primeTime(c)?.let { c to it } }
     }
 
     Column(Modifier.fillMaxSize()) {
-        HeroPanel(vm.hero)
+        // Reads vm.hero itself: a focus move redraws the panel, not the whole screen
+        HeroPanel(vm)
         LazyColumn(
-            state = vm.homeListState,
+            state = vm.homeList,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 8.dp, bottom = 64.dp),
             verticalArrangement = Arrangement.spacedBy(28.dp),
@@ -100,7 +102,7 @@ fun HomeScreen(vm: AppViewModel) {
                 Column {
                     SectionTitle("En ce moment", trailing = Fmt.day(now))
                     LazyRow(
-                        state = vm.rowState("live"),
+                        state = vm.row("live"),
                         contentPadding = RowPadding,
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
@@ -111,7 +113,7 @@ fun HomeScreen(vm: AppViewModel) {
                                 width = CardWidth,
                                 onClick = { vm.watch(c) },
                                 onFocus = { vm.homeFocusKey = key; liveHero(c) },
-                                modifier = Modifier.restoreFocus(vm.restorePending && vm.homeFocusKey == key) { vm.restorePending = false },
+                                modifier = Modifier.restoreFocus(vm.restoreFocus && vm.homeFocusKey == key) { vm.restoreFocus = false },
                             )
                         }
                     }
@@ -121,20 +123,20 @@ fun HomeScreen(vm: AppViewModel) {
             if (resume.isNotEmpty()) item(key = "resume") {
                 Column {
                     SectionTitle("Reprendre la lecture")
-                    LazyRow(state = vm.rowState("resume"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    LazyRow(state = vm.row("resume"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         items(resume, key = { it.url }, contentType = { "resume" }) { e ->
                             val key = "resume:${e.url}"
                             ResumeCard(
                                 e, CardWidth,
-                                onClick = { vm.resumeEntry(e) },
-                                onLongClick = { vm.askRemoveResume(e) },
+                                onClick = { vm.resume(e) },
+                                onLongClick = { vm.resumeMenu(e) },
                                 onFocus = {
                                     vm.homeFocusKey = key
                                     vm.hero = Hero(kicker = "Reprendre", title = e.label, meta = e.subtitle,
                                         description = "${Fmt.clock(e.position)} / ${Fmt.clock(e.duration)}", progress = e.progress)
                                     vm.backdrop = e.image.ifBlank { null }
                                 },
-                                modifier = Modifier.restoreFocus(vm.restorePending && vm.homeFocusKey == key) { vm.restorePending = false },
+                                modifier = Modifier.restoreFocus(vm.restoreFocus && vm.homeFocusKey == key) { vm.restoreFocus = false },
                             )
                         }
                     }
@@ -144,14 +146,14 @@ fun HomeScreen(vm: AppViewModel) {
             if (tonight.isNotEmpty()) item(key = "tonight") {
                 Column {
                     SectionTitle("Ce soir à la télé")
-                    LazyRow(state = vm.rowState("tonight"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    LazyRow(state = vm.row("tonight"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         items(tonight, key = { it.first.id }, contentType = { "tonight" }) { (c, p) ->
                             val key = "tonight:${c.id}"
                             TonightCard(
                                 c, p, CardWidth,
                                 onClick = {
-                                    if (p.isOnAt(AppViewModel.nowSec())) vm.watch(c)
-                                    else vm.toast("${p.title}", "À ${Fmt.time(p.start)} sur ${c.label}")
+                                    if (p.isOnAt(LiveTv.nowSeconds())) vm.watch(c)
+                                    else vm.messages.toast("${p.title}", "À ${Fmt.time(p.start)} sur ${c.label}")
                                 },
                                 onFocus = {
                                     vm.homeFocusKey = key
@@ -160,7 +162,7 @@ fun HomeScreen(vm: AppViewModel) {
                                         description = p.desc, logo = c.logo)
                                     vm.backdrop = p.icon.ifBlank { null } ?: c.fanart
                                 },
-                                modifier = Modifier.restoreFocus(vm.restorePending && vm.homeFocusKey == key) { vm.restorePending = false },
+                                modifier = Modifier.restoreFocus(vm.restoreFocus && vm.homeFocusKey == key) { vm.restoreFocus = false },
                             )
                         }
                     }
@@ -170,7 +172,7 @@ fun HomeScreen(vm: AppViewModel) {
             if (replay != null && replay.items.isNotEmpty()) item(key = "replay") {
                 Column {
                     SectionTitle("Replay", trailing = "toutes les chaînes")
-                    LazyRow(state = vm.rowState("replay"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    LazyRow(state = vm.row("replay"), contentPadding = RowPadding, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         items(replay.items, key = { it.url }, contentType = { "logo" }) { item ->
                             val key = "replay:${item.url}"
                             LogoTile(
@@ -182,7 +184,7 @@ fun HomeScreen(vm: AppViewModel) {
                                         description = "Émissions, séries et documentaires disponibles en rattrapage.", logo = item.thumb ?: "")
                                     vm.backdrop = item.art["fanart"]
                                 },
-                                modifier = Modifier.restoreFocus(vm.restorePending && vm.homeFocusKey == key) { vm.restorePending = false },
+                                modifier = Modifier.restoreFocus(vm.restoreFocus && vm.homeFocusKey == key) { vm.restoreFocus = false },
                             )
                         }
                     }
@@ -194,7 +196,8 @@ fun HomeScreen(vm: AppViewModel) {
 
 /** Large text block describing the focused card (Google TV style). */
 @Composable
-fun HeroPanel(hero: Hero?) {
+private fun HeroPanel(vm: AppViewModel) {
+    val hero = vm.hero
     Box(Modifier.fillMaxWidth().height(196.dp).padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp)) {
         // No cross-fade here: the text changes at every D-pad step
         hero.let { h ->

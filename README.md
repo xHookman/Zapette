@@ -4,7 +4,7 @@
 
 Zapette exécute l'extension Kodi [Catch-up TV & More](https://github.com/Catch-up-TV-and-More/plugin.video.catchuptvandmore)
 *telle quelle* dans une application Android TV native, avec une interface pensée pour la télécommande :
-on allume, on tombe sur sa dernière chaîne, on zappe avec ▲▼, on tape « 2 » pour France 2.
+on allume, on tombe sur sa dernière chaîne, on zappe avec CH+ CH−, on tape « 2 » pour France 2.
 
 ## Ce que ça fait
 
@@ -43,14 +43,41 @@ Les propriétés `inputstream.adaptive.*` d'un flux résolu (type de manifeste, 
 `license_key = url|en-têtes|R{SSM}|JBlicense`…) sont traduites pour ExoPlayer
 (`player/KodiLicenseCallback.kt`).
 
-Fichiers principaux :
+### Organisation du code
 
-- `app/src/main/python/` : la couche Kodi émulée et le pont (`zapette_kodi/bridge.py`)
-- `app/src/main/assets/addons/` : Catch-up TV & More et codequick embarqués (zip)
-- `app/src/main/java/fr/zapette/tv/engine/` : démarrage de Python, installation et mise à jour de l'extension
-- `app/src/main/java/fr/zapette/tv/player/` : ExoPlayer + licences DRM façon Kodi
-- `app/src/main/java/fr/zapette/tv/ui/` : l'interface (écrans, lecteur, composants)
-- `tools/test_bridge.py` : test du moteur sur ordinateur, avec la vraie extension
+Chaque fichier a un rôle et un seul ; les écrans ne font qu'afficher l'état et appeler des actions.
+
+```
+app/src/main/java/fr/zapette/tv/
+├─ engine/        AddonEngine   – appels à l'extension (un seul thread, comme Kodi) + cache disque du guide
+│                 AddonInstaller– installation / mise à jour de l'extension (zip vérifié, taille bornée)
+│                 AppUpdater    – mise à jour de Zapette depuis les Releases (HTTPS, paquet, version, signature)
+│                 PythonHost    – dialogues de l'extension (liste, clavier, oui/non) vers l'interface
+├─ live/          LiveTv        – chaînes (numérotation TNT), guide TV, horloge
+│                 LivePlayback  – le « tuner » : un lecteur unique, zapping, neige, mini-lecteur, reprise après veille
+├─ player/        StreamPlayer  – ExoPlayer réglé pour les TV (HLS, DASH, DRM façon inputstream.adaptive)
+│                 PlaybackErrors– messages d'erreur en français, correction du format annoncé
+│                 ZapHiss       – le souffle pendant la neige (généré en direct)
+├─ ui/            AppViewModel  – navigation et actions communes ; délègue à :
+│                 Messages      – toasts, choix, saisie, « patientez »
+│                 Updates       – mises à jour, cache, vérification des comptes
+│                 Navigation    – onglets, pile d'écrans · RemoteKeys – touches de la télécommande
+│  ├─ screens/    Accueil, Chaînes, Guide, Replay/Explorer, Réglages, démarrage
+│  ├─ player/     direct (LivePlayerScreen + LiveOverlays + LiveVideoLayer), replay (VodPlayerScreen)
+│  └─ components/ briques visuelles (cartes, barre d'onglets, dialogues, notifications)
+└─ Images.kt      requêtes d'images : logos décodés une seule fois à taille fixe
+
+app/src/main/python/zapette_kodi/
+├─ bridge.py      l'API appelée par Kotlin (fine couche sur les modules ci-dessous)
+├─ plugin.py      exécution d'une url plugin:// et capture du résultat
+├─ convert.py     conversion des objets Kodi en JSON
+├─ live.py · settings.py · accounts.py   chaînes/guide, réglages, test des comptes
+├─ runtime.py     état d'une exécution, masquage des mots de passe dans les journaux
+└─ patches.py     corrections ponctuelles de l'extension sans la modifier
+app/src/main/python/xbmc*.py, kodi_six, inputstreamhelper, YDStreamExtractor   le Kodi émulé
+```
+
+`tools/test_bridge.py` teste le moteur sur ordinateur, avec la vraie extension (lancé à chaque build).
 
 ## Obtenir l'APK
 
@@ -62,9 +89,14 @@ directement téléchargeables (pas de zip) :
 
 Une fois Zapette installée, les versions suivantes s'installent depuis l'application :
 **Réglages → Mettre à jour Zapette** (Android demande, la première fois, d'autoriser Zapette à installer des applications).
-Toutes les versions sont signées avec la même clé (`app/zapette-release.jks`) pour que la mise à jour soit acceptée.
-Pour utiliser votre propre clé, fournissez `ZAPETTE_KEYSTORE`, `ZAPETTE_KEYSTORE_PASSWORD`, `ZAPETTE_KEY_ALIAS`,
-`ZAPETTE_KEY_PASSWORD` au build (désinstallation nécessaire une fois en changeant de clé).
+### Signature
+Les versions publiées sont signées avec une **clé privée** qui n'est pas dans le dépôt : la CI la lit
+dans quatre secrets GitHub (*Settings → Secrets and variables → Actions*) :
+`ZAPETTE_KEYSTORE_B64` (le keystore en base64), `ZAPETTE_KEYSTORE_PASSWORD`, `ZAPETTE_KEY_ALIAS`, `ZAPETTE_KEY_PASSWORD`.
+Sans ces secrets, le build vérifie le code mais **ne publie rien**. Un build local est signé avec la clé de debug.
+
+Créer une clé : `keytool -genkeypair -keystore zapette.jks -storetype PKCS12 -alias zapette -keyalg RSA -keysize 4096 -validity 36500`
+puis `base64 -w0 zapette.jks` pour la valeur de `ZAPETTE_KEYSTORE_B64`. Changer de clé impose de désinstaller Zapette une fois.
 
 Lancez le workflow à la main (*Actions → Build APK → Run workflow*) pour embarquer la toute dernière version de l'extension.
 
@@ -89,7 +121,7 @@ Avec l'application *Downloader* (ou *Send Files to TV*), ou en ADB :
 | ▶ | fiche du programme (OK : audio & sous-titres) | +10 s (maintenir : +30 s, +60 s) |
 | Menu | audio & sous-titres | audio & sous-titres |
 | Sous-titres | active / désactive les sous-titres | active / désactive les sous-titres |
-| Retour | ferme le panneau ouvert, puis quitte le plein écran : la chaîne continue dans le mini-lecteur en haut à droite | quitte (la position est mémorisée) |
+| Retour | ferme le panneau ouvert, puis quitte le plein écran : la chaîne continue dans le mini-lecteur, dans un coin | quitte (la position est mémorisée) |
 | OK deux fois rapidement (menus) | revient en plein écran sur la chaîne du mini-lecteur (la touche Lecture aussi) | — |
 | OK long (menus) | — | menu contextuel de l'extension (favoris, masquer…) |
 

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import fr.zapette.tv.data.Channel
 import fr.zapette.tv.data.Programme
+import fr.zapette.tv.live.LiveTv
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.components.ChannelLogo
 import fr.zapette.tv.ui.components.EmptyState
@@ -46,14 +47,15 @@ import fr.zapette.tv.ui.components.Spinner
 import fr.zapette.tv.ui.components.restoreFocus
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
+import kotlinx.coroutines.delay
 import java.util.Calendar
 
 /** Two-pane TV guide: channels on the left, the day's schedule on the right. */
 @Composable
 fun GuideScreen(vm: AppViewModel) {
-    val channels by vm.channels.collectAsState()
-    val epg by vm.epg.collectAsState()
-    val now by vm.now.collectAsState()
+    val channels by vm.live.channels.collectAsState()
+    val epg by vm.live.guide.collectAsState()
+    val now by vm.live.now.collectAsState()
 
     if (channels.isEmpty()) {
         EmptyState("Guide indisponible", "Aucune chaîne n'est configurée.")
@@ -61,7 +63,14 @@ fun GuideScreen(vm: AppViewModel) {
     }
     var selectedId by remember { mutableStateOf(vm.guideFocusId ?: vm.store.lastChannelId ?: channels.first().id) }
     var day by remember { mutableIntStateOf(0) }
-    val selected = channels.firstOrNull { it.id == selectedId } ?: channels.first()
+    // The schedule follows the focus once it rests on a channel: rebuilding it at
+    // every D-pad step made scrolling the channels stutter
+    var scheduleId by remember { mutableStateOf(selectedId) }
+    LaunchedEffect(selectedId) {
+        delay(160)
+        scheduleId = selectedId
+    }
+    val selected = channels.firstOrNull { it.id == scheduleId } ?: channels.first()
 
     val dayStart = remember(day) {
         Calendar.getInstance().apply {
@@ -90,17 +99,17 @@ fun GuideScreen(vm: AppViewModel) {
         Row(Modifier.fillMaxSize().padding(start = Z.Gutter, end = Z.Gutter)) {
             // ----------------------------------------------------- channels
             LazyColumn(
-                state = vm.guideChannelsState,
+                state = vm.guideChannels,
                 modifier = Modifier.width(310.dp).fillMaxHeight(),
                 contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(channels, key = { it.id }, contentType = { "channel" }) { c ->
                     GuideChannelRow(
-                        c, vm.nowPlaying(c, now), selected = c.id == selectedId,
+                        c, vm.live.nowPlaying(c, now), selected = c.id == selectedId,
                         onClick = { vm.watch(c) },
                         onFocus = { selectedId = c.id; vm.guideFocusId = c.id; vm.backdrop = null },
-                        modifier = Modifier.restoreFocus(vm.restorePending && c.id == selectedId) { vm.restorePending = false },
+                        modifier = Modifier.restoreFocus(vm.restoreFocus && c.id == selectedId) { vm.restoreFocus = false },
                     )
                 }
             }
@@ -131,9 +140,9 @@ fun GuideScreen(vm: AppViewModel) {
                         items(programmes, key = { it.start }, contentType = { "programme" }) { p ->
                             ProgrammeRow(p, now, onClick = {
                                 when {
-                                    p.isOnAt(AppViewModel.nowSec()) -> vm.watch(selected)
-                                    p.stop <= now -> vm.toast(p.title, "Programme terminé. Retrouvez-le peut-être dans Replay.")
-                                    else -> vm.toast(p.title, "Diffusion à ${Fmt.time(p.start)} sur ${selected.label}")
+                                    p.isOnAt(LiveTv.nowSeconds()) -> vm.watch(selected)
+                                    p.stop <= now -> vm.messages.toast(p.title, "Programme terminé. Retrouvez-le peut-être dans Replay.")
+                                    else -> vm.messages.toast(p.title, "Diffusion à ${Fmt.time(p.start)} sur ${selected.label}")
                                 }
                             })
                         }

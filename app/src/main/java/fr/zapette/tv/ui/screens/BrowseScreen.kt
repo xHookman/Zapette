@@ -50,7 +50,7 @@ import fr.zapette.tv.ui.theme.ZType
  */
 @Composable
 fun BrowseScreen(vm: AppViewModel, state: BrowseState, embedded: Boolean) {
-    val resume by vm.resume.collectAsState()
+    val resume by vm.store.resume.collectAsState()
 
     LaunchedEffect(state) {
         if (!state.loaded && !state.loading) vm.load(state)
@@ -60,49 +60,11 @@ fun BrowseScreen(vm: AppViewModel, state: BrowseState, embedded: Boolean) {
     val logoMode = items.isNotEmpty() && items.count { it.hasLogoArt } * 2 >= items.size
     val columns = if (logoMode) 5 else 4
     var restored by remember(state) { mutableStateOf(false) }
-    val canRestore = if (embedded) vm.restorePending else !restored
-
-    // Infinite scroll: fetch the next page when the focus gets close to the end
-    LaunchedEffect(state.focusedIndex, items.size, state.nextPage) {
-        if (state.nextPage != null && !state.loadingMore && state.focusedIndex >= items.size - columns * 2) {
-            vm.load(state, more = true)
-        }
-    }
+    val canRestore = if (embedded) vm.restoreFocus else !restored
 
     Column(Modifier.fillMaxSize()) {
-        // ------------------------------------------------------- header
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .height(if (embedded) 150.dp else 186.dp)
-                .padding(start = Z.Gutter, end = Z.Gutter, top = if (embedded) 8.dp else Z.GutterTop)
-        ) {
-            Text(
-                state.title.ifBlank { "Catch-up TV & More" }.uppercase(),
-                style = ZType.Small.copy(letterSpacing = 1.5.sp), color = Z.Live, maxLines = 1,
-            )
-            Spacer(Modifier.height(8.dp))
-            val f = state.focused
-            Text(
-                f?.title ?: state.title, style = ZType.Headline, color = Z.Text, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 760.dp),
-            )
-            if (f != null) {
-                val sub = subtitleOf(f)
-                if (sub.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(sub, style = ZType.Label, color = Z.Muted, maxLines = 1)
-                }
-                val plot = f.info.plot ?: f.info.plotoutline
-                if (!plot.isNullOrBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        plot, style = ZType.Body, color = Z.Muted, maxLines = if (embedded) 2 else 3,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 700.dp),
-                    )
-                }
-            }
-        }
+        // Reads the focused item itself: a focus move redraws the header, not the grid
+        BrowseHeader(state, embedded)
 
         // -------------------------------------------------------- body
         Box(Modifier.fillMaxSize()) {
@@ -123,7 +85,7 @@ fun BrowseScreen(vm: AppViewModel, state: BrowseState, embedded: Boolean) {
                             if (!embedded) ZButton("Retour", onClick = { vm.onBack() })
                         }
                     }
-                    LaunchedEffect(state.error) { if (!embedded || vm.restorePending) runCatching { focus.requestFocus() } }
+                    LaunchedEffect(state.error) { if (!embedded || vm.restoreFocus) runCatching { focus.requestFocus() } }
                 }
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
@@ -141,12 +103,16 @@ fun BrowseScreen(vm: AppViewModel, state: BrowseState, embedded: Boolean) {
                             onFocus = {
                                 state.focusedIndex = index
                                 state.focused = item
+                                // Infinite scroll: fetch the next page when the focus gets close to the end
+                                if (index >= state.items.size - columns * 2 && state.nextPage != null && !state.loadingMore) {
+                                    vm.load(state, more = true)
+                                }
                                 vm.backdrop = if (item.hasLogoArt) null else item.backdrop
                             },
                             resumeProgress = resume.firstOrNull { it.url == item.url }?.progress ?: 0f,
                             modifier = Modifier.restoreFocus(canRestore && index == state.focusedIndex.coerceAtMost(items.lastIndex)) {
                                 restored = true
-                                if (embedded) vm.restorePending = false
+                                if (embedded) vm.restoreFocus = false
                             },
                         )
                     }
@@ -158,6 +124,43 @@ fun BrowseScreen(vm: AppViewModel, state: BrowseState, embedded: Boolean) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Title of the folder, then the title, subtitle and summary of the focused item. */
+@Composable
+private fun BrowseHeader(state: BrowseState, embedded: Boolean) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .height(if (embedded) 150.dp else 186.dp)
+            .padding(start = Z.Gutter, end = Z.Gutter, top = if (embedded) 8.dp else Z.GutterTop)
+    ) {
+        Text(
+            state.title.ifBlank { "Catch-up TV & More" }.uppercase(),
+            style = ZType.Small.copy(letterSpacing = 1.5.sp), color = Z.Live, maxLines = 1,
+        )
+        Spacer(Modifier.height(8.dp))
+        val f = state.focused
+        Text(
+            f?.title ?: state.title, style = ZType.Headline, color = Z.Text, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 760.dp),
+        )
+        if (f != null) {
+            val sub = subtitleOf(f)
+            if (sub.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(sub, style = ZType.Label, color = Z.Muted, maxLines = 1)
+            }
+            val plot = f.info.plot ?: f.info.plotoutline
+            if (!plot.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    plot, style = ZType.Body, color = Z.Muted, maxLines = if (embedded) 2 else 3,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 700.dp),
+                )
             }
         }
     }

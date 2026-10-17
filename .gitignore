@@ -9,3 +9,5 @@ captures/
 .cxx/
 *.keystore
 __pycache__/
+*.jks
+zapette-secrets*.txt
