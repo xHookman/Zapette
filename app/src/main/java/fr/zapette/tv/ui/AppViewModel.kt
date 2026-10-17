@@ -81,6 +81,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         updates.checkApp(manual = false)
     }
 
+    // ----------------------------------------------------------- presentation
+    /** New installation: the presentation of the remote keys is shown before anything else. */
+    var introShown by mutableStateOf(!store.introSeen && store.lastChannelId == null)
+        private set
+
+    /** From the settings. The corner channel stops: its picture would be hidden anyway. */
+    fun showIntro() {
+        playback.stop()
+        introShown = true
+    }
+
+    fun closeIntro() {
+        store.introSeen = true
+        introShown = false
+        restoreFocus = true
+    }
+
     private suspend fun reloadAddonContent() {
         live.loadChannels()
         setUpReplayTab()

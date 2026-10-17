@@ -48,6 +48,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("zap_sound", true)
         set(value) = prefs.edit().putBoolean("zap_sound", value).apply()
 
+    /** The first-start presentation was shown (or skipped). */
+    var introSeen: Boolean
+        get() = prefs.getBoolean("intro_seen", false)
+        set(value) = prefs.edit().putBoolean("intro_seen", value).apply()
+
     /** Light mode for weak TVs: auto | on | off (applied at next start). */
     var perfMode: String
         get() = prefs.getString("perf_mode", "auto") ?: "auto"

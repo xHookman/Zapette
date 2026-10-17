@@ -42,6 +42,7 @@ import fr.zapette.tv.ui.player.VodPlayerScreen
 import fr.zapette.tv.ui.screens.BrowseScreen
 import fr.zapette.tv.ui.screens.GuideScreen
 import fr.zapette.tv.ui.screens.HomeScreen
+import fr.zapette.tv.ui.screens.IntroScreen
 import fr.zapette.tv.ui.screens.LiveScreen
 import fr.zapette.tv.ui.screens.SettingsScreen
 import fr.zapette.tv.ui.screens.SplashScreen
@@ -59,7 +60,8 @@ class MainActivity : ComponentActivity() {
             ZapetteTheme {
                 Box(Modifier.fillMaxSize().background(Z.Bg)) {
                     when (val boot = vm.boot) {
-                        AppViewModel.Boot.Ready -> MainScreen(vm, onExit = ::finish)
+                        // The first-start presentation replaces the screens until it is closed
+                        AppViewModel.Boot.Ready -> if (vm.introShown) IntroScreen(vm::closeIntro) else MainScreen(vm, onExit = ::finish)
                         else -> SplashScreen(boot, onRetry = { vm.start() })
                     }
                     AppDialogs(vm)

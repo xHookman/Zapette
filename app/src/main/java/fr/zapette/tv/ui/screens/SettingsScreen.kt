@@ -207,6 +207,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     "La première fois, Android demande d'autoriser Zapette à installer des applications.",
             ) { vm.updates.checkApp(manual = true) },
             Line.Header("À propos"),
+            Line.Item("Revoir la présentation", description = "Les touches de la télécommande en 5 écrans.") { vm.showIntro() },
             Line.Item("Zapette ${BuildConfig.VERSION_NAME}",
                 description = "Interface TV pour Catch-up TV & More. Les contenus sont fournis par les chaînes ; " +
                     "certains nécessitent un compte (TF1+, M6+…) à renseigner dans « Comptes ».") {},
