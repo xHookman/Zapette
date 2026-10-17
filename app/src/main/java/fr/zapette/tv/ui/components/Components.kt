@@ -179,7 +179,7 @@ fun ZImage(
     contentScale: ContentScale = ContentScale.Crop,
     placeholder: Color = Z.Surface2,
     alpha: Float = 1f,
-    widthPx: Int = 480,
+    widthPx: Int = Images.CARD_PX,
 ) {
     Box(modifier.background(placeholder)) {
         if (!url.isNullOrBlank()) {

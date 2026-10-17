@@ -29,6 +29,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
+import fr.zapette.tv.Images
 import fr.zapette.tv.Perf
 import fr.zapette.tv.ui.components.AppDialogs
 import fr.zapette.tv.ui.components.BusyOverlay
@@ -197,7 +198,7 @@ private fun Backdrop(vm: AppViewModel) {
     ) {
         ZImage(
             url, Modifier.fillMaxWidth(0.7f).fillMaxHeight(0.75f).align(Alignment.TopEnd),
-            contentScale = ContentScale.Crop, placeholder = Color.Transparent, alpha = 0.55f, widthPx = 1280,
+            contentScale = ContentScale.Crop, placeholder = Color.Transparent, alpha = 0.55f, widthPx = Images.CARD_PX,   // same bitmap as the focused card: no decoding
         )
     }
 }

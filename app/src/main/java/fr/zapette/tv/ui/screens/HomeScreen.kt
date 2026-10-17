@@ -86,7 +86,7 @@ fun HomeScreen(vm: AppViewModel) {
 
     // Prime time of the main channels: computed once per guide update, not at each frame
     val tonight = remember(channels, epg) {
-        channels.filter { it.number in 1..27 }.mapNotNull { c -> vm.live.primeTime(c)?.let { c to it } }
+        vm.live.tonight(channels)
     }
 
     Column(Modifier.fillMaxSize()) {

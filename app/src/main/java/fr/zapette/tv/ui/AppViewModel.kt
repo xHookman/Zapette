@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fr.zapette.tv.Images
 import fr.zapette.tv.Perf
 import fr.zapette.tv.ZapetteApplication
 import fr.zapette.tv.data.Channel
@@ -16,9 +17,13 @@ import fr.zapette.tv.data.PluginItem
 import fr.zapette.tv.data.ResumeEntry
 import fr.zapette.tv.live.LivePlayback
 import fr.zapette.tv.live.LiveTv
+import fr.zapette.tv.ui.components.liveCardImage
+import fr.zapette.tv.ui.components.tonightCardImage
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The app's state, shared by every screen.
@@ -41,7 +46,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val updates = Updates(
         app, engine, messages, viewModelScope,
         onAddonChanged = ::reloadAddonContent,
-        onCacheCleared = { live.startGuide() },
+        onCacheCleared = { live.reloadGuide() },
     )
 
     // --------------------------------------------------------------- start-up
@@ -69,16 +74,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             boot = Boot.Failed(t.message ?: t.toString())
             return@launch
         }
-        boot = Boot.Ready
 
-        // Like a TV set: start on the last channel watched
-        val last = live.channel(store.lastChannelId)
-        if (store.startOnLive && last != null) watch(last)
+        // Like a TV set: start on the last channel watched. Otherwise the home screen
+        // opens first, with its rows and their first pictures already loaded.
+        val last = live.channel(store.lastChannelId)?.takeIf { store.startOnLive }
+        if (last == null) {
+            boot = Boot.Loading("Préparation de l'accueil…")
+            prepareHome()
+        }
+        boot = Boot.Ready
+        if (last != null) watch(last)
+
         // The guide is parsed in Python: let the first channel start first
-        live.startGuide(waitFirstMs = if (last != null && store.startOnLive) 4_000 else 0)
+        live.startGuide(waitFirstMs = if (last != null) 4_000 else 0)
         launch { live.loadCountries() }
-        launch { setUpReplayTab() }
+        launch {
+            if (replayRoot == null) setUpReplayTab()
+            if (last != null) {
+                // Back from the channel, the home screen must be ready too
+                delay(8_000)
+                replayRoot?.let { load(it)?.join() }
+                Images.warm(getApplication(), homePictures(firstCards = true))
+            }
+            // The other cards: downloaded now, decoded when they come on screen
+            Images.prefetch(getApplication(), homePictures(firstCards = false))
+        }
         updates.checkApp(manual = false)
+    }
+
+    /**
+     * Loads what the home screen shows (today's guide, the replay menu) and the
+     * pictures of its first cards. Bounded in time: a slow network never blocks the start.
+     */
+    private suspend fun prepareHome() {
+        // Started apart: a timeout stops waiting for them, not the loading itself
+        val guide = viewModelScope.async { live.loadToday() }
+        val replay = viewModelScope.async {
+            setUpReplayTab()
+            replayRoot?.let { load(it)?.join() }
+        }
+        withTimeoutOrNull(PREPARE_MS) {
+            guide.await()
+            replay.await()
+        }
+        withTimeoutOrNull(PICTURES_MS) { Images.warm(getApplication(), homePictures(firstCards = true)) }
+    }
+
+    /** Pictures of the home rows: the cards visible at first, or all the others. */
+    private fun homePictures(firstCards: Boolean): List<String> {
+        fun <T> part(list: List<T>) = if (firstCards) list.take(FIRST_CARDS) else list.drop(FIRST_CARDS)
+        val channels = live.channels.value
+        return part(channels).map { liveCardImage(it, live.nowPlaying(it)) } +
+            part(live.tonight(channels)).map { (c, p) -> tonightCardImage(c, p) } +
+            part(replayRoot?.items.orEmpty()).mapNotNull { it.thumb }
     }
 
     // ----------------------------------------------------------- presentation
@@ -102,7 +150,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         live.loadChannels()
         setUpReplayTab()
         exploreRoot = BrowseState(ROOT_URL, "Explorer")
-        live.startGuide()
+        live.reloadGuide()
     }
 
     fun changeCountry(countryId: String) = viewModelScope.launch {
@@ -273,13 +321,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     /** Loads an add-on folder, or appends its next page. */
-    fun load(state: BrowseState, more: Boolean = false) {
-        val url = if (more) state.nextPage?.url ?: return else state.url
+    fun load(state: BrowseState, more: Boolean = false): Job? {
+        val url = if (more) state.nextPage?.url ?: return null else state.url
         if (more) state.loadingMore = true else {
             state.loading = true
             state.error = null
         }
-        viewModelScope.launch {
+        return viewModelScope.launch {
             val result = engine.invoke(url, if (more) "" else state.selected)
             messages.show(result.notifications)
             state.loading = false
@@ -384,6 +432,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val ROOT_URL = "plugin://plugin.video.catchuptvandmore/"
+        const val PREPARE_MS = 6_000L
+        const val PICTURES_MS = 3_000L
+        /** Cards visible on screen when a home row appears. */
+        const val FIRST_CARDS = 6
         const val NOTHING_HERE = "Aucun contenu disponible ici pour le moment."
     }
 }

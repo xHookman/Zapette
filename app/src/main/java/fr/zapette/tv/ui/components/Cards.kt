@@ -62,6 +62,12 @@ fun Modifier.restoreFocus(isTarget: Boolean, onRestored: () -> Unit = {}): Modif
 
 private val bottomShade = Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color(0xD9000000))
 
+/** Picture of a live card: the programme on air, else the channel's artwork. */
+fun liveCardImage(channel: Channel, programme: Programme?): String =
+    programme?.icon?.takeIf { it.isNotBlank() } ?: channel.fanart
+
+fun tonightCardImage(channel: Channel, programme: Programme): String = programme.icon.ifBlank { channel.fanart }
+
 /** "En ce moment": what is on air on a channel, as a picture card. */
 @Composable
 fun LiveCard(
@@ -75,8 +81,7 @@ fun LiveCard(
 ) {
     Column(modifier.width(width)) {
         FocusSurface(onClick = onClick, onFocus = onFocus, shape = CardShape, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-            val image = programme?.icon?.takeIf { it.isNotBlank() } ?: channel.fanart
-            ZImage(image, Modifier.fillMaxSize())
+            ZImage(liveCardImage(channel, programme), Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(bottomShade))
             Row(
                 Modifier.align(Alignment.BottomStart).padding(10.dp),
@@ -236,7 +241,7 @@ fun ResumeCard(entry: ResumeEntry, width: Dp, onClick: () -> Unit, onLongClick: 
 fun TonightCard(channel: Channel, programme: Programme, width: Dp, onClick: () -> Unit, onFocus: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.width(width)) {
         FocusSurface(onClick = onClick, onFocus = onFocus, shape = CardShape, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-            ZImage(programme.icon.ifBlank { channel.fanart }, Modifier.fillMaxSize())
+            ZImage(tonightCardImage(channel, programme), Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(bottomShade))
             Row(Modifier.align(Alignment.BottomStart).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 ChannelLogo(channel.logo, size = 34.dp, background = Color(0xCC0E1015))

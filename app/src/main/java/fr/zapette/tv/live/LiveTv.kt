@@ -74,9 +74,8 @@ class LiveTv(
         store.liveCountry = countryId
         store.lastChannelId = null
         store.previousChannelId = null
-        _guide.value = emptyMap()
         loadChannels()
-        startGuide()
+        reloadGuide()
     }
 
     fun channel(id: String?): Channel? = id?.let { byId[it] }
@@ -91,31 +90,54 @@ class LiveTv(
     }
 
     // ------------------------------------------------------------------- guide
+    private var todayLoaded = -1        // day of year of the guide in memory
+    private var tomorrowLoaded = -1
+
     /**
-     * Loads today's guide, then tomorrow's, and again when the date changes.
-     * Parsing runs in Python, so the first load can wait for the first channel to start.
+     * Today's guide, now. Called at start-up so that the home screen opens complete;
+     * from the disk cache it takes a moment, the first time of the day it is parsed.
+     */
+    suspend fun loadToday(): Boolean {
+        val today = engine.guide(store.liveCountry, 0)
+        if (today.isEmpty()) return false
+        _guide.value = today
+        todayLoaded = dayOfYear()
+        return true
+    }
+
+    /**
+     * Keeps the guide up to date: today's (if not loaded yet), then tomorrow's, and
+     * again when the date changes. Parsing runs in Python, so the first load can
+     * wait for the first channel to start.
      */
     fun startGuide(waitFirstMs: Long = 0) {
         guideJob?.cancel()
         guideJob = scope.launch {
             delay(waitFirstMs)
-            var loadedDay = -1
             while (true) {
-                val day = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-                if (day != loadedDay) {
-                    val country = store.liveCountry
-                    val today = engine.guide(country, 0)
-                    if (today.isNotEmpty()) {
-                        _guide.value = today
-                        loadedDay = day
-                        val tomorrow = engine.guide(country, 1)
-                        if (tomorrow.isNotEmpty()) _guide.value = merge(today, tomorrow)
+                val day = dayOfYear()
+                if (todayLoaded != day) loadToday()
+                if (todayLoaded == day && tomorrowLoaded != day) {
+                    val tomorrow = engine.guide(store.liveCountry, 1)
+                    if (tomorrow.isNotEmpty()) {
+                        _guide.value = merge(_guide.value, tomorrow)
+                        tomorrowLoaded = day
                     }
                 }
                 delay(10 * 60_000L)
             }
         }
     }
+
+    /** Forgets the guide and loads it again (country changed, cache cleared, add-on updated). */
+    fun reloadGuide() {
+        todayLoaded = -1
+        tomorrowLoaded = -1
+        _guide.value = emptyMap()
+        startGuide()
+    }
+
+    private fun dayOfYear() = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
 
     private fun merge(a: Guide, b: Guide): Guide = (a.keys + b.keys).associateWith { id ->
         (a[id].orEmpty() + b[id].orEmpty()).distinctBy { it.start }.sortedBy { it.start }
@@ -134,6 +156,10 @@ class LiveTv(
         }.timeInMillis / 1000
         return programmes(channel).firstOrNull { it.isOnAt(evening) }
     }
+
+    /** "Ce soir à la télé": prime time of the main channels (TNT 1 to 27). */
+    fun tonight(channels: List<Channel>): List<Pair<Channel, Programme>> =
+        channels.filter { it.number in 1..27 }.mapNotNull { c -> primeTime(c)?.let { c to it } }
 
     companion object {
         fun nowSeconds() = System.currentTimeMillis() / 1000
