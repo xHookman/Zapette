@@ -4,9 +4,9 @@ Une application Android TV qui fait tourner l'extension Kodi **Catch-up TV & Mor
 
 ## Pourquoi
 
-J'utilisais Catch-up TV & More dans Kodi pour regarder la TV gratuitement. L'extension marche bien, mais Kodi est lourd, lent sur les box pas très puissantes, et pas pratique quand on veut juste regarder la télé.
+J'utilisais Catch-up TV & More dans Kodi pour regarder la TV. L'extension marche bien, mais Kodi est lourd sur les box pas très puissantes, et pas pratique quand on veut juste regarder la télé.
 
-J'ai donc fait une application qui ne fait que ça : regarder les chaînes en direct et en replay, plus fluide, avec une interface pensée pour la télécommande. C'est la même extension derrière, donc les mêmes chaînes. Il n'y a que l'interface qui change.
+J'ai donc voulu faire une application qui ne fait que ça : regarder les chaînes en direct et en replay, plus fluide, avec une interface pensée pour la télécommande. C'est la même extension derrière, donc les mêmes chaînes. Il n'y a que l'interface qui change.
 
 ## Ce que ça fait
 
@@ -24,15 +24,11 @@ C'est la principale contrainte, et elle vient des chaînes, pas de l'application
 1. créer un compte (gratuit) sur leur site ou leur application ;
 2. le renseigner dans **Réglages → Comptes** dans Zapette.
 
-Sans ça, ces chaînes ne se lancent pas. Si le même identifiant sert pour plusieurs services, Zapette permet de le copier de l'un à l'autre, et il vérifie que le mot de passe est accepté au moment où on le saisit.
-
-Autre contrainte : la plupart des chaînes ne marchent que depuis la France.
+Sans ça, ces chaînes ne se lancent pas. Si le même identifiant sert pour plusieurs services, Zapette permet de le copier de l'un à l'autre.
 
 ## Installer
 
-1. Télécharger le fichier `.apk` de la [dernière version](https://github.com/xHookman/Zapette/releases/latest). Il n'y en a qu'un, il marche sur toutes les TV et box Android. Sur la TV, l'application *Downloader* fait ça très bien.
-2. L'ouvrir et autoriser l'installation d'applications inconnues quand Android le demande.
-3. Ensuite, les mises à jour se font depuis **Réglages → Mettre à jour Zapette**.
+Téléchargez et envoyez le fichier `.apk` de la [dernière version](https://github.com/xHookman/Zapette/releases/latest) sur la TV (via LocalSend par exemple)
 
 ## Touches
 
