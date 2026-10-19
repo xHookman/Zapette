@@ -8,6 +8,8 @@ J'utilisais Catch-up TV & More dans Kodi pour regarder la TV. L'extension marche
 
 J'ai donc voulu faire une application qui ne fait que ça : regarder les chaînes en direct et en replay, plus fluide, avec une interface pensée pour la télécommande. C'est la même extension derrière, donc les mêmes chaînes. Il n'y a que l'interface qui change.
 
+Pour être honnête : cette application est vibecodée. Je l'ai faite avec une IA, faute de temps et de connaissances en développement Android. Je ne prétends pas que le code soit parfait. Elle m'est très utile au quotidien, alors je la partage telle quelle, au cas où elle serve à d'autres.
+
 ## Ce que ça fait
 
 - Le direct, avec les chaînes numérotées comme sur la TNT. CH+ / CH− pour zapper, on tape le numéro pour aller sur une chaîne.
