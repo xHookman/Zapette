@@ -25,8 +25,8 @@ permissions:
   contents: read
 
 env:
-  # Version 1.0 was build number 24: the version is 1.<build number − 24>
-  FIRST_BUILD: 24
+  # Version 1.0 was build number 25: the version is 1.<build number − 25>
+  FIRST_BUILD: 25
 
 jobs:
   build:
@@ -107,6 +107,13 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/zapette-$ZAPETTE_VERSION.apk"
           ls -la dist
+
+      # A release published again (workflow re-run) replaces the previous one
+      - name: Remove a previous release of the same version
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.key.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete "v$ZAPETTE_VERSION" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
 
       - name: Publish the release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.key.outputs.signed == 'true'
