@@ -1,7 +1,7 @@
 name: Build APK
 
-# Every push on main publishes a GitHub Release "v1.<build number>" with the
-# APK files (no zip). Zapette checks these releases to update itself.
+# Every push on main publishes a GitHub Release "v1.<n>" with the APK.
+# Zapette checks these releases to update itself.
 #
 # Releases are signed with the private Zapette key, kept in GitHub secrets:
 #   ZAPETTE_KEYSTORE_B64, ZAPETTE_KEYSTORE_PASSWORD, ZAPETTE_KEY_ALIAS, ZAPETTE_KEY_PASSWORD
@@ -11,6 +11,8 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    # A change of the documentation alone does not make a new version
+    paths-ignore: [ "README.md", "LICENSE" ]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,6 +23,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Version 1.0 was build number 24: the version is 1.<build number − 24>
+  FIRST_BUILD: 24
 
 jobs:
   build:
@@ -72,6 +78,9 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Version
+        run: echo "ZAPETTE_VERSION=1.$(( ${{ github.run_number }} - FIRST_BUILD ))" >> "$GITHUB_ENV"
+
       - name: Build
         env:
           ZAPETTE_KEYSTORE_PASSWORD: ${{ secrets.ZAPETTE_KEYSTORE_PASSWORD }}
@@ -96,20 +105,18 @@ jobs:
       - name: Name the APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/zapette-1.${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/zapette-$ZAPETTE_VERSION.apk"
           ls -la dist
 
       - name: Publish the release
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.key.outputs.signed == 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: v1.${{ github.run_number }}
-          name: Zapette 1.${{ github.run_number }}
+          tag_name: v${{ env.ZAPETTE_VERSION }}
+          name: Zapette ${{ env.ZAPETTE_VERSION }}
           target_commitish: ${{ github.sha }}
           make_latest: "true"
           body: |
-            ${{ github.event.head_commit.message }}
-
-            Un seul APK, compatible avec toutes les TV et box Android.
-            Les versions suivantes s'installent directement depuis Zapette : Réglages → Mettre à jour Zapette.
+            Un seul APK, pour toutes les TV et box Android.
+            Déjà installée ? Mise à jour depuis Zapette : Réglages → Mettre à jour Zapette.
           files: dist/*.apk

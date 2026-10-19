@@ -20,10 +20,10 @@ android {
         applicationId = "fr.zapette.tv"
         minSdk = 24
         targetSdk = 35
-        // Each CI build is a release "v1.<build number>"; the app updates itself from them
-        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
-        versionCode = build ?: 1
-        versionName = if (build != null) "1.$build" else "1.0-dev"
+        // The CI gives both (see .github/workflows/build.yml). The code is the build
+        // number: it only goes up, as Android requires for an update.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = System.getenv("ZAPETTE_VERSION") ?: "dev"
         buildConfigField("String", "UPDATE_REPO", "\"${System.getenv("GITHUB_REPOSITORY") ?: "xHookman/Zapette"}\"")
 
         ndk {

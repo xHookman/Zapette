@@ -32,13 +32,12 @@ class AppUpdater(private val context: Context) {
 
     data class Release(
         val versionName: String,
-        val versionCode: Int,
         val apkUrl: String,
         val apkName: String,
         val size: Long,
         val notes: String,
     ) {
-        val isNewer get() = versionCode > BuildConfig.VERSION_CODE
+        val isNewer get() = newerThan(versionName, BuildConfig.VERSION_NAME)
     }
 
     /** Latest published release, or null when GitHub can't be reached. */
@@ -47,7 +46,6 @@ class AppUpdater(private val context: Context) {
             val text = get("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest")
             val json = Json.parseToJsonElement(text).jsonObject
             val tag = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-            val code = tag.substringAfterLast('.').toIntOrNull() ?: return@runCatching null
             val assets = (json["assets"] as? JsonArray).orEmpty().map { it.jsonObject }
                 .filter { it.str("name").endsWith(".apk") }
             // One APK per release, for every device
@@ -57,7 +55,6 @@ class AppUpdater(private val context: Context) {
             if (!asset.str("browser_download_url").startsWith(expected)) return@runCatching null
             Release(
                 versionName = tag.removePrefix("v"),
-                versionCode = code,
                 apkUrl = asset.str("browser_download_url"),
                 apkName = asset.str("name"),
                 size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0,
@@ -187,6 +184,18 @@ class AppUpdater(private val context: Context) {
     }
 
     private companion object {
+        /** "1.10" is newer than "1.9". A development build ("dev") is never updated. */
+        fun newerThan(candidate: String, installed: String): Boolean {
+            val a = candidate.split('.').map { it.toIntOrNull() ?: return false }
+            val b = installed.split('.').map { it.toIntOrNull() ?: return false }
+            for (i in 0 until maxOf(a.size, b.size)) {
+                val x = a.getOrElse(i) { 0 }
+                val y = b.getOrElse(i) { 0 }
+                if (x != y) return x > y
+            }
+            return false
+        }
+
         const val MAX_APK_BYTES = 400L * 1024 * 1024
     }
 }
