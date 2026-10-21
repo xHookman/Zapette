@@ -184,10 +184,14 @@ class AppUpdater(private val context: Context) {
     }
 
     private companion object {
-        /** "1.10" is newer than "1.9". A development build ("dev") is never updated. */
+        /**
+         * "1.10" is newer than "1.9". A test build ("1.5-test.31") is replaced by any
+         * release; a local build ("dev") is never updated.
+         */
         fun newerThan(candidate: String, installed: String): Boolean {
+            if (installed == "dev") return false
             val a = candidate.split('.').map { it.toIntOrNull() ?: return false }
-            val b = installed.split('.').map { it.toIntOrNull() ?: return false }
+            val b = installed.split('.').map { it.toIntOrNull() ?: return true }
             for (i in 0 until maxOf(a.size, b.size)) {
                 val x = a.getOrElse(i) { 0 }
                 val y = b.getOrElse(i) { 0 }
