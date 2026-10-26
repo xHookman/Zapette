@@ -56,10 +56,14 @@ class LiveTv(
     }
 
     // ---------------------------------------------------------------- channels
+    /** Channels in TV numbering order, as the add-on gives them. */
+    private var tvOrder: List<Channel> = emptyList()
+
     suspend fun loadChannels(): Boolean {
         val list = runCatching { engine.liveChannels(store.liveCountry) }.getOrDefault(emptyList())
         byId = list.associateBy { it.id }
-        _channels.value = list
+        tvOrder = list
+        _channels.value = inUserOrder(list)
         // Logos are fetched once, in the background, so that screens never wait for them
         list.forEach { if (it.logo.isNotBlank()) context.imageLoader.enqueue(Images.logo(context, it.logo)) }
         return list.isNotEmpty()
@@ -79,6 +83,37 @@ class LiveTv(
     }
 
     fun channel(id: String?): Channel? = id?.let { byId[it] }
+
+    // ---------------------------------------------------------- channel order
+    /**
+     * The user can move channels in the guide. The numbers do not change (2 stays
+     * France 2); only the order of the list and of CH+ / CH− does.
+     */
+    val hasUserOrder: Boolean get() = store.channelOrder.isNotEmpty()
+
+    private fun inUserOrder(list: List<Channel>): List<Channel> {
+        val order = store.channelOrder
+        if (order.isEmpty()) return list
+        val rank = order.withIndex().associate { (i, id) -> id to i }
+        // Channels not in the saved order (new ones) keep their place after the others
+        return list.sortedBy { rank[it.id] ?: (order.size + list.indexOf(it)) }
+    }
+
+    /** Moves a channel up (−1) or down (+1) in the list. */
+    fun moveChannel(id: String, step: Int) {
+        val list = _channels.value.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        val to = from + step
+        if (from < 0 || to !in list.indices) return
+        list.add(to, list.removeAt(from))
+        _channels.value = list
+        store.channelOrder = list.map { it.id }
+    }
+
+    fun resetChannelOrder() {
+        store.channelOrder = emptyList()
+        _channels.value = tvOrder
+    }
 
     fun channelNumber(number: Int): Channel? = _channels.value.firstOrNull { it.number == number }
 

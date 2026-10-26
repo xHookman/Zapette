@@ -63,6 +63,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("accounts_offered", false)
         set(value) = prefs.edit().putBoolean("accounts_offered", value).apply()
 
+    /** The user's order of the channels (ids); empty: TV numbering order. */
+    var channelOrder: List<String>
+        get() = prefs.getString("channel_order", "").orEmpty().split('\n').filter { it.isNotBlank() }
+        set(value) = prefs.edit().putString("channel_order", value.joinToString("\n")).apply()
+
     /** Developer mode: the test builds of the dev branch are offered as updates. */
     var developerMode: Boolean
         get() = prefs.getBoolean("developer_mode", false)

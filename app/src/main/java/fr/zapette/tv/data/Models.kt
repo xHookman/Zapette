@@ -183,6 +183,8 @@ data class SettingEntry(
     val hidden: Boolean = false,
     val options: List<SettingOption> = emptyList(),
     val action: String = "",
+    /** A line of explanation in plain words, shown under the focused setting. */
+    val help: String = "",
 )
 
 /** Result of a login test: ok | invalid | network | unsupported */

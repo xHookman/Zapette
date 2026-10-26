@@ -25,6 +25,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import fr.zapette.tv.data.Channel
+import fr.zapette.tv.live.LiveTv
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.components.Fmt
 import fr.zapette.tv.ui.NumberEntry
@@ -41,7 +42,8 @@ import kotlinx.coroutines.launch
  *
  * Remote: CH+/CH− zap · digits = channel number (0 = previous) · ▲ ▼ = banner (what is on)
  * · OK = banner, then channel list · OK held or Info = programme sheet
- * · ◀ ▶ go back / forward in time (hold to go faster) · Play/Pause · ▼ with the banner = back to live
+ * · ◀ ▶ go back / forward in time (hold to go faster) · Play/Pause
+ * · ▼ with the banner = back to live (time-shift) or the banner's buttons (subtitles, audio, restart)
  * · Guide = channel list · Subtitles / Menu = subtitles, audio · Back = leave.
  */
 @Composable
@@ -63,6 +65,8 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     // counts (the OK that opened the channel is released on this screen)
     var okDown by remember { mutableStateOf(false) }
     var okHeld by remember { mutableStateOf(false) }
+    /** Button of the banner focused with ▼ (null: none). */
+    var actionIndex by remember { mutableStateOf<Int?>(null) }
     var seekFlash by remember { mutableStateOf<String?>(null) }
     var flashTimer by remember { mutableStateOf<Job?>(null) }
 
@@ -71,7 +75,10 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         bannerTimer?.cancel()
         bannerTimer = scope.launch {
             delay(5_000)
-            if (!channelList && !programmeSheet) banner = false
+            if (!channelList && !programmeSheet) {
+                banner = false
+                actionIndex = null
+            }
         }
     }
 
@@ -104,6 +111,25 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         showBanner()
     }
 
+    /** Buttons of the banner: subtitles first, as it is what people look for. */
+    fun bannerActions(): List<Pair<String, () -> Unit>> {
+        val player = playback.player ?: return emptyList()
+        val channel = live.channel(playback.channelId)
+        val programme = channel?.let { live.nowPlaying(it, LiveTv.nowSeconds()) }
+        return listOfNotNull(
+            (if (vm.subtitlesOn) "Sous-titres : activés" else "Sous-titres : désactivés") to { toggleSubtitles(vm, player) },
+            "Audio et langues" to { openTrackMenu(vm, player) },
+            if (programme != null && playback.canTimeShift) {
+                "Reprendre au début" to { playback.goBackTo(programme.start * 1000, programme.title) }
+            } else null,
+        )
+    }
+
+    fun closeActions() {
+        actionIndex = null
+        showBanner()
+    }
+
     /** Programme sheet (OK held, or Info). It replaces the banner: both at once overlapped. */
     fun toggleSheet() {
         programmeSheet = !programmeSheet
@@ -118,7 +144,12 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     /** OK released: a short press shows the banner, then the channel list. */
     fun okPress() {
         val player = playback.player
+        val action = actionIndex
         when {
+            action != null -> {
+                bannerActions().getOrNull(action)?.second?.invoke()
+                closeActions()
+            }
             playback.error != null -> playback.retry()
             programmeSheet -> player?.let { openTrackMenu(vm, it) }
             banner -> channelList = true
@@ -128,6 +159,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
 
     fun zap(step: Int) {
         programmeSheet = false
+        actionIndex = null
         playback.zap(step)
         showBanner()
     }
@@ -155,6 +187,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         if (e.isBack()) {
             when {
                 numbers.cancel() -> Unit
+                actionIndex != null -> closeActions()
                 channelList -> {
                     channelList = false
                     runCatching { focus.requestFocus() }
@@ -191,8 +224,9 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> zap(+1)
                 KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> zap(-1)
                 // Time-shift, as in Kodi. The arrows never zap (on purpose)
-                KeyEvent.KEYCODE_DPAD_LEFT -> seek(-step)
-                KeyEvent.KEYCODE_DPAD_RIGHT -> seek(step)
+                // In the banner's buttons, ◀ ▶ move between them
+                KeyEvent.KEYCODE_DPAD_LEFT -> actionIndex?.let { actionIndex = (it - 1).coerceAtLeast(0) } ?: seek(-step)
+                KeyEvent.KEYCODE_DPAD_RIGHT -> actionIndex?.let { actionIndex = (it + 1).coerceAtMost(bannerActions().lastIndex) } ?: seek(step)
                 KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-30_000)
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(30_000)
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> {
@@ -202,17 +236,26 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                     }
                 }
                 // ▲ ▼: what is on. In time-shift, ▼ with the banner shown goes back to live
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (banner && !programmeSheet && (timeShift.delayMs > 0 || timeShift.paused)) {
+                // ▲ ▼: what is on. With the banner shown, ▼ goes back to live (time-shift)
+                // or to the banner's buttons (subtitles, audio…)
+                KeyEvent.KEYCODE_DPAD_DOWN -> when {
+                    banner && !programmeSheet && !timeShift.live -> {
                         playback.backToLive()
                         readTimeShift()
+                        showBanner()
                     }
-                    programmeSheet = false
-                    showBanner()
+                    banner && !programmeSheet && actionIndex == null && bannerActions().isNotEmpty() -> {
+                        actionIndex = 0
+                        bannerTimer?.cancel()      // the banner stays while choosing
+                    }
+                    else -> {
+                        programmeSheet = false
+                        if (actionIndex == null) showBanner()
+                    }
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     programmeSheet = false
-                    showBanner()
+                    if (actionIndex != null) closeActions() else showBanner()
                 }
                 KeyEvent.KEYCODE_INFO -> toggleSheet()
                 KeyEvent.KEYCODE_GUIDE -> {
@@ -256,7 +299,12 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             playback.loading -> LoadingOverlay(shown)
         }
 
-        LiveBanner(vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift, modifier = Modifier.align(Alignment.BottomCenter))
+        LiveBanner(
+            vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift,
+            actions = if (timeShift.live) bannerActions().map { it.first } else emptyList(),
+            selectedAction = actionIndex,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
 
         // Not live: always said, even without the banner
         if ((timeShift.delayMs > 0 || timeShift.paused) && typed.isEmpty()) {

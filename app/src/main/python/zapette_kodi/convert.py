@@ -128,6 +128,11 @@ def info_to_json(info):
 _SUPPORTED_ACTIONS = ("runplugin", "container.update", "playmedia", "container.refresh")
 
 
+def _context_label(label):
+    """"Ajouter aux favoris du plugin" → "Ajouter aux favoris": Zapette users don't know the plugin."""
+    return re.sub(r"\s+(du plugin|de l'extension|de l’extension)$", "", localized_label(label))
+
+
 def _useful_context(action):
     if "/resources/lib/vpn/" in action:  # OpenVPN does not exist on Android TV
         return False
@@ -159,7 +164,7 @@ def item_to_json(url, listitem, is_folder):
         "art": {k: v for k, v in art.items() if v},
         "info": info_to_json(data["info"]),
         "params": params,
-        "context": [{"label": localized_label(c["label"]), "action": c["action"]}
+        "context": [{"label": _context_label(c["label"]), "action": c["action"]}
                     for c in data["context"] if _useful_context(c["action"])],
     }
 

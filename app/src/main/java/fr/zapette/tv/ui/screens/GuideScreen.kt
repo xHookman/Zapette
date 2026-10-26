@@ -2,6 +2,7 @@
 
 package fr.zapette.tv.ui.screens
 
+import android.view.KeyEvent
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -37,6 +39,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +50,7 @@ import fr.zapette.tv.data.Channel
 import fr.zapette.tv.data.Programme
 import fr.zapette.tv.live.LiveTv
 import fr.zapette.tv.ui.AppViewModel
+import fr.zapette.tv.ui.Choice
 import fr.zapette.tv.ui.components.ChannelLogo
 import fr.zapette.tv.ui.components.EmptyState
 import fr.zapette.tv.ui.components.Fmt
@@ -54,10 +60,13 @@ import fr.zapette.tv.ui.components.ProgressLine
 import fr.zapette.tv.ui.components.SingleLine
 import fr.zapette.tv.ui.components.Spinner
 import fr.zapette.tv.ui.components.restoreFocus
+import fr.zapette.tv.ui.isBack
+import fr.zapette.tv.ui.isOk
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
 import java.util.Calendar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The TV guide, which is also the channel list: channels on the left, the day's
@@ -141,9 +150,48 @@ private fun ChannelPane(
     onFocused: (String) -> Unit,
 ) {
     val now by vm.live.now.collectAsState()
+    val scope = rememberCoroutineScope()
+    /** Channel being moved: ▲ ▼ move it, OK or Retour put it down. */
+    var movingId by remember { mutableStateOf<String?>(null) }
+
+    fun move(step: Int) {
+        val id = movingId ?: return
+        vm.live.moveChannel(id, step)
+        // Keep the moved channel on screen
+        val index = vm.live.channels.value.indexOfFirst { it.id == id }
+        val visible = vm.guideChannels.layoutInfo.visibleItemsInfo
+        if (visible.isNotEmpty() && (index <= visible.first().index || index >= visible.last().index)) {
+            scope.launch { vm.guideChannels.scrollToItem((index - 3).coerceAtLeast(0)) }
+        }
+    }
+
+    fun channelMenu(c: Channel) {
+        val options = listOf("Regarder", "Déplacer la chaîne") +
+            if (vm.live.hasUserOrder) listOf("Remettre l'ordre des numéros") else emptyList()
+        vm.messages.ask(Choice(c.label, options) { i ->
+            when (i) {
+                0 -> vm.watch(c)
+                1 -> movingId = c.id
+                2 -> vm.live.resetChannelOrder()
+            }
+        })
+    }
+
     LazyColumn(
         state = vm.guideChannels,
-        modifier = Modifier.width(310.dp).fillMaxHeight(),
+        modifier = Modifier.width(310.dp).fillMaxHeight().onPreviewKeyEvent { event ->
+            if (movingId == null) return@onPreviewKeyEvent false
+            val e = event.nativeKeyEvent
+            if (event.type == KeyEventType.KeyDown) {
+                when (e.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> move(-1)
+                    KeyEvent.KEYCODE_DPAD_DOWN -> move(+1)
+                }
+            } else if (e.isOk() || e.isBack()) {
+                movingId = null   // put down on release, so the key does nothing else
+            }
+            true
+        },
         contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -156,8 +204,9 @@ private fun ChannelPane(
                 }
             }
             GuideChannelRow(
-                c, vm.live.nowPlaying(c, now), selected = isFocused,
+                c, vm.live.nowPlaying(c, now), selected = isFocused, moving = c.id == movingId,
                 onClick = { vm.watch(c) },
+                onLongClick = { channelMenu(c) },
                 onFocus = {
                     onFocused(c.id)
                     vm.guideFocusId = c.id
@@ -239,14 +288,17 @@ private fun GuideChannelRow(
     c: Channel,
     current: Programme?,
     selected: Boolean,
+    moving: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onFocus: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     FocusSurface(
-        onClick = onClick, onFocus = onFocus, modifier = modifier.fillMaxWidth(),
+        onClick = onClick, onLongClick = onLongClick, onFocus = onFocus, modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp), focusedScale = 1.03f,
-        container = if (selected) Z.Surface2 else Color.Transparent, focusedContainer = Z.Surface3,
+        container = if (selected) Z.Surface2 else Color.Transparent,
+        focusedContainer = if (moving) Z.LiveSoft else Z.Surface3,
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -257,8 +309,10 @@ private fun GuideChannelRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 SingleLine(c.label, ZType.Label, Z.Text)
-                SingleLine(current?.title ?: "—", ZType.Small, Z.Muted)
+                SingleLine(if (moving) "▲ ▼ pour déplacer · OK pour poser" else current?.title ?: "—",
+                    ZType.Small, if (moving) Z.Text else Z.Muted)
             }
+            if (moving) Text("↕", style = ZType.Title, color = Z.Live)
         }
     }
 }

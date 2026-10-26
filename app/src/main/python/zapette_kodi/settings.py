@@ -12,6 +12,65 @@ from zapette_kodi.convert import clean_label
 
 _VALUE_TYPES = ("bool", "text", "number", "enum", "labelenum", "select", "slider")
 
+# ---------------------------------------------------------------- what is shown
+# The add-on is made for Kodi. Its settings that only make sense in Kodi (start
+# with Kodi, Kodi's live TV, VPN, downloads, Kodi logs, inputstream…) do nothing
+# in Zapette and are left out. Pages left empty disappear.
+HIDDEN_IDS = {
+    "auto_run", "iptv.enabled", "use_ia_hls_stream", "use_ytdl_stream", "device_l1",
+    "tv_guide",            # Zapette has its own guide
+    "active_subtitle",     # in Zapette's own page (Lecture → Sous-titres)
+    "log_pop_up", "header_x-forwarded-for",
+    "dl_quality", "dl_background", "dl_item_filename",
+    "vpn.hide", "vpn.args", "vpn.sudo", "vpn.sudopsw",
+    "schedulesdirect.login", "schedulesdirect.password", "schedulesdirect.lineup",
+}
+HIDDEN_ACTIONS = ("/iptvmanager/", "/vpn/", "/addon_utils/")   # parts of the action url
+
+# Plain words, and a line of explanation shown under the focused setting.
+# id or action url part -> (label, help, {option value: label})
+WORDING = {
+    "quality": ("Qualité vidéo",
+                "Maximale : la meilleure image. Minimale : moins de données, pour une connexion lente. "
+                "« Demander » propose le choix à chaque vidéo.",
+                {"0": "Maximale", "1": "Par défaut", "2": "Demander à chaque fois", "3": "Minimale"}),
+    "stream_bitrate_limit": ("Limiter le débit",
+                             "Pour une connexion lente : plafonne la qualité des vidéos (en kbit/s).",
+                             {"0": "Pas de limite"}),
+    "6play.login": ("Identifiant M6+", "", {}),
+    "6play.password": ("Mot de passe M6+", "", {}),
+    "/favourites/delete_favourites/": (
+        "Supprimer tous les favoris",
+        "Pour ajouter un favori : maintenez OK sur une émission dans Replay ou Explorer. "
+        "Ils se retrouvent dans Explorer → Favoris.", {}),
+    "/menu_utils/restore_default_order/": (
+        "Remettre les menus dans l'ordre d'origine",
+        "Annule les déplacements faits dans les menus de Replay et Explorer (OK maintenu → Déplacer).", {}),
+    "/menu_utils/unmask_all_hidden_items/": (
+        "Réafficher tout ce qui a été masqué",
+        "Annule tous les « Masquer » faits dans les menus de Replay et Explorer.", {}),
+    "/menu_utils/unmask_items/": (
+        "Choisir les éléments à réafficher", "", {}),
+}
+
+
+def _hidden(entry):
+    if entry.get("id") in HIDDEN_IDS:
+        return True
+    return entry["type"] == "action" and any(part in entry.get("action", "") for part in HIDDEN_ACTIONS)
+
+
+def _reword(entry):
+    key = entry.get("id") or next((k for k in WORDING if k.startswith("/") and k in entry.get("action", "")), None)
+    wording = WORDING.get(key)
+    if wording:
+        label, help_text, options = wording
+        entry["label"] = label
+        entry["help"] = help_text
+        for option in entry.get("options", []):
+            option["label"] = options.get(option["value"], option["label"])
+    return entry
+
 
 def _label(value):
     if value is None:
@@ -59,7 +118,8 @@ def schema():
         root = ET.parse(addoninfo.settings_xml_path(runtime.ADDON_ID)).getroot()
         categories = []
         for category in root.findall("category"):
-            entries = [e for e in (_entry(n) for n in category.findall("setting") if n.get("visible") != "false") if e]
+            entries = [_reword(e) for e in (_entry(n) for n in category.findall("setting") if n.get("visible") != "false")
+                       if e and not _hidden(e)]
             # sections without any setting after them are dropped
             entries = [e for i, e in enumerate(entries)
                        if e["type"] != "section" or (i + 1 < len(entries) and entries[i + 1]["type"] != "section")]

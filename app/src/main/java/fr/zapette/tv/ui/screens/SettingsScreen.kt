@@ -380,12 +380,12 @@ private fun addonLine(
     onAction: (String) -> Unit,
 ): Line? = when (e.type) {
     "section" -> Line.Header(e.label)
-    "bool" -> Line.Item(e.label, toggle = e.value.equals("true", true)) {
+    "bool" -> Line.Item(e.label, toggle = e.value.equals("true", true), description = e.help) {
         set(e.id, if (e.value.equals("true", true)) "false" else "true")
     }
     "enum", "labelenum", "select" -> {
         val current = e.options.firstOrNull { it.value == e.value }?.label ?: e.value
-        Line.Item(e.label, value = current) {
+        Line.Item(e.label, value = current, description = e.help) {
             vm.messages.ask(Choice(e.label, e.options.map { it.label }, e.options.indexOfFirst { it.value == e.value }) { i ->
                 set(e.id, e.options[i].value)
             })
@@ -398,11 +398,11 @@ private fun addonLine(
             secret -> "••••••••"
             else -> e.value
         }
-        Line.Item(e.label, value = shown) {
+        Line.Item(e.label, value = shown, description = e.help) {
             vm.messages.askText(TextAsk(e.label, if (secret) "" else e.value, secret) { set(e.id, it) })
         }
     }
-    "action" -> Line.Item(e.label) { onAction(e.action) }
+    "action" -> Line.Item(e.label, description = e.help) { onAction(e.action) }
     else -> null
 }
 

@@ -248,14 +248,19 @@ class LivePlayback(
         val request = startAt ?: return
         if (request.channelId != channelId) return
         startAt = null
-        val back = System.currentTimeMillis() - request.epochMs
+        goBackTo(request.epochMs, request.title)
+    }
+
+    /** Plays the channel from the moment [epochMs] (start of a programme), as far as it allows. */
+    fun goBackTo(epochMs: Long, title: String) {
+        val wanted = System.currentTimeMillis() - epochMs     // delay to reach that moment
         when {
-            !canTimeShift -> notify(request.title, "Cette chaîne ne permet pas de revenir en arrière : lecture en direct.")
-            back > windowMs() -> {
-                seekBy(-windowMs())
-                notify(request.title, "Le début n'est plus disponible : lecture au plus tôt possible.")
+            !canTimeShift -> notify(title, "Cette chaîne ne permet pas de revenir en arrière : lecture en direct.")
+            wanted > windowMs() -> {
+                seekBy(-(windowMs() - delayMs()))
+                notify(title, "Le début n'est plus disponible : lecture au plus tôt possible.")
             }
-            else -> seekBy(-back)
+            else -> seekBy(-(wanted - delayMs()))
         }
     }
 
