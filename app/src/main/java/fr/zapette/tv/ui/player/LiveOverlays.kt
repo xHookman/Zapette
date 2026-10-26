@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -57,6 +58,8 @@ import kotlinx.coroutines.delay
 data class TimeShift(val delayMs: Long = 0, val windowMs: Long = 0, val paused: Boolean = false) {
     val live get() = delayMs == 0L && !paused
 }
+
+private val HintsWidth = 220.dp
 
 private val BannerShade = Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color(0xB3000000), 1f to Color(0xF2000000))
 
@@ -114,7 +117,7 @@ fun LiveBanner(
                         Text(meta, style = ZType.Label, color = Z.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            ProgressLine(current.progress(at), Modifier.width(420.dp))
+                            ProgressLine(current.progress(at), Modifier.weight(1f, fill = false).widthIn(max = 420.dp))
                             Spacer(Modifier.width(12.dp))
                             Text(Fmt.remaining(current.stop, at), style = ZType.Small, color = Z.Muted)
                         }
@@ -134,17 +137,16 @@ fun LiveBanner(
                     }
                 }
                 Spacer(Modifier.width(24.dp))
-                Column(horizontalAlignment = Alignment.End) {
+                // A fixed width: a long hint used to squeeze the programme column (broken layout)
+                Column(Modifier.width(HintsWidth), horizontalAlignment = Alignment.End) {
                     Clock()
                     Spacer(Modifier.height(16.dp))
-                    Text(
-                        when {
-                            selectedAction != null -> "◀ ▶ choisir   OK valider   ▲ fermer"
-                            timeShift.live -> "▼ sous-titres, audio   OK chaînes   ◀ ▶ reculer, avancer"
-                            else -> "▼ revenir au direct   ◀ ▶ reculer, avancer"
-                        },
-                        style = ZType.Small, color = Z.Faint,
-                    )
+                    val hints = when {
+                        selectedAction != null -> listOf("◀ ▶ choisir", "OK valider", "▲ fermer")
+                        timeShift.live -> listOf("▼ sous-titres, audio", "OK chaînes", "◀ ▶ reculer, avancer")
+                        else -> listOf("▼ revenir au direct", "◀ ▶ reculer, avancer")
+                    }
+                    hints.forEach { Text(it, style = ZType.Small, color = Z.Faint, maxLines = 1) }
                 }
             }
         }
