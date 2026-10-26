@@ -13,11 +13,13 @@ from zapette_kodi.convert import clean_label
 _VALUE_TYPES = ("bool", "text", "number", "enum", "labelenum", "select", "slider")
 
 # ---------------------------------------------------------------- what is shown
-# The add-on is made for Kodi. Its settings that only make sense in Kodi (start
-# with Kodi, Kodi's live TV, VPN, downloads, Kodi logs, inputstream…) do nothing
-# in Zapette and are left out. Pages left empty disappear.
+# The add-on is made for Kodi. What only works inside Kodi is left out: start with
+# Kodi, Kodi's live TV, downloads, sending Kodi's logs, and the VPN (it drives the
+# OpenVPN program of a computer, which an Android TV does not have). Technical
+# switches of the player (inputstream, yt-dlp, X-Forwarded-For) keep their default.
+# Pages left empty disappear. What stays is worded without "Kodi".
 HIDDEN_IDS = {
-    "auto_run", "iptv.enabled", "use_ia_hls_stream", "use_ytdl_stream", "device_l1",
+    "auto_run", "iptv.enabled", "use_ia_hls_stream", "use_ytdl_stream",
     "tv_guide",            # Zapette has its own guide
     "active_subtitle",     # in Zapette's own page (Lecture → Sous-titres)
     "log_pop_up", "header_x-forwarded-for",
@@ -25,18 +27,32 @@ HIDDEN_IDS = {
     "vpn.hide", "vpn.args", "vpn.sudo", "vpn.sudopsw",
     "schedulesdirect.login", "schedulesdirect.password", "schedulesdirect.lineup",
 }
+
+# Page names
+CATEGORY_WORDING = {"Qualité et Contenu": "Qualité et chaînes"}
 HIDDEN_ACTIONS = ("/iptvmanager/", "/vpn/", "/addon_utils/")   # parts of the action url
 
 # Plain words, and a line of explanation shown under the focused setting.
 # id or action url part -> (label, help, {option value: label})
+# For the settings in ONLY_LISTED_OPTIONS, the other choices are left out.
 WORDING = {
-    "quality": ("Qualité vidéo",
-                "Maximale : la meilleure image. Minimale : moins de données, pour une connexion lente. "
+    "quality": ("Qualité de l'image",
+                "La meilleure image, ou une image plus légère pour une connexion lente. "
                 "« Demander » propose le choix à chaque vidéo.",
-                {"0": "Maximale", "1": "Par défaut", "2": "Demander à chaque fois", "3": "Minimale"}),
-    "stream_bitrate_limit": ("Limiter le débit",
-                             "Pour une connexion lente : plafonne la qualité des vidéos (en kbit/s).",
-                             {"0": "Pas de limite"}),
+                {"0": "La meilleure", "1": "Automatique", "2": "Demander à chaque fois", "3": "La plus légère"}),
+    "stream_bitrate_limit": ("Connexion lente",
+                             "Si les vidéos s'arrêtent souvent pour charger : limitez la qualité.",
+                             {"0": "Pas de limite", "750": "Image très légère", "1500": "Image légère",
+                              "4000": "Qualité normale", "8000": "Haute définition"}),
+    "device_l1": ("Haute définition des chaînes protégées",
+                  "Pour les box certifiées Google (Chromecast, Shield, Freebox…) : certaines chaînes, "
+                  "comme TF1+ ou M6+, passent alors en HD. Si la vidéo ne se lance plus, désactivez.", {}),
+    "uk.channel4.programmes.sort.by": ("Channel 4 : ordre des émissions", "",
+                                       {"popular": "Les plus regardées", "az": "De A à Z",
+                                        "recently-added": "Ajoutées récemment"}),
+    "qvc.language": ("QVC : pays", "", {"JP": "Japon", "DE": "Allemagne", "IT": "Italie",
+                                         "UK": "Royaume-Uni", "US": "États-Unis"}),
+    "nhkworld.language": ("NHK World : version", "", {"Outside Japan": "Internationale", "In Japan": "Japonaise"}),
     "6play.login": ("Identifiant M6+", "", {}),
     "6play.password": ("Mot de passe M6+", "", {}),
     "/favourites/delete_favourites/": (
@@ -54,6 +70,15 @@ WORDING = {
 }
 
 
+ONLY_LISTED_OPTIONS = {"stream_bitrate_limit"}
+
+# Language choices of the international channels ("FR", "de"…) in words
+LANGUAGES = {"fr": "Français", "en": "Anglais", "de": "Allemand", "es": "Espagnol", "it": "Italien",
+             "pl": "Polonais", "ar": "Arabe", "ru": "Russe", "pt": "Portugais", "bg": "Bulgare",
+             "fa": "Persan", "el": "Grec", "hu": "Hongrois", "tr": "Turc", "uk": "Ukrainien",
+             "ro": "Roumain", "es-la": "Espagnol (Amérique latine)"}
+
+
 def _hidden(entry):
     if entry.get("id") in HIDDEN_IDS:
         return True
@@ -67,8 +92,15 @@ def _reword(entry):
         label, help_text, options = wording
         entry["label"] = label
         entry["help"] = help_text
+        if key in ONLY_LISTED_OPTIONS:
+            entry["options"] = [o for o in entry.get("options", []) if o["value"] in options]
+            if entry["value"] not in options:
+                entry["value"] = "0"
         for option in entry.get("options", []):
             option["label"] = options.get(option["value"], option["label"])
+    if entry.get("id", "").endswith(".language") and entry.get("id") not in WORDING:
+        for option in entry.get("options", []):
+            option["label"] = LANGUAGES.get(option["label"].lower(), option["label"])
     return entry
 
 
@@ -124,7 +156,8 @@ def schema():
             entries = [e for i, e in enumerate(entries)
                        if e["type"] != "section" or (i + 1 < len(entries) and entries[i + 1]["type"] != "section")]
             if entries:
-                categories.append({"label": _label(category.get("label")), "entries": entries})
+                label = _label(category.get("label"))
+                categories.append({"label": CATEGORY_WORDING.get(label, label), "entries": entries})
         return categories
 
 

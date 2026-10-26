@@ -110,7 +110,7 @@ def _invoke(url, depth):
         if target.startswith(("plugin://plugin.video.youtube", "plugin://plugin.video.dailymotion")):
             stream = _external_video(target) or stream
         if stream["url"].startswith("plugin://"):
-            result.update(kind="error", error="Ce contenu nécessite une autre extension Kodi (%s)."
+            result.update(kind="error", error="Ce contenu n'est pas lisible dans Zapette (%s)."
                           % stream["url"].split("/")[2])
             return result
         result.update(kind="resolved", stream=stream)
