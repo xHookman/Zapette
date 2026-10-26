@@ -9,7 +9,9 @@ import fr.zapette.tv.data.Store
 import fr.zapette.tv.engine.AddonEngine
 import fr.zapette.tv.engine.AppUpdater
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -40,7 +42,7 @@ class Updates(
         when {
             release == null -> if (manual) messages.toast("Mise à jour", "GitHub est injoignable pour le moment.", error = true)
             !release.isNewer -> if (manual) messages.toast("Zapette est à jour", "Version ${BuildConfig.VERSION_NAME}")
-            !manual -> messages.toast("Zapette ${release.versionName} disponible", "Réglages → Mettre à jour Zapette")
+            // At start-up too: a dialog, a toast was too easy to miss
             else -> messages.ask(
                 Choice(
                     "Zapette ${release.versionName} disponible (installée : ${BuildConfig.VERSION_NAME})",
@@ -70,15 +72,22 @@ class Updates(
         val title = "Téléchargement de Zapette ${release.versionName}…"
         messages.busy(title)
         val apk = runCatching { updater.download(release) { percent -> messages.busy("$title $percent %") } }
-        messages.busy(null)
-        apk.onFailure { messages.toast("Téléchargement impossible", it.message ?: "", error = true) }
+        apk.onFailure {
+            messages.busy(null)
+            messages.toast("Téléchargement impossible", it.message ?: "", error = true)
+        }
         apk.onSuccess { file ->
-            val problem = updater.verify(file, release)
+            // Reading the signature of the APK takes a few seconds on a TV: said, and off the screen thread
+            messages.busy("Vérification de la mise à jour…")
+            val problem = withContext(Dispatchers.IO) { updater.verify(file, release) }
             if (problem != null) {
+                messages.busy(null)
                 file.delete()
                 messages.toast("Mise à jour refusée", problem, error = true)
             } else {
+                messages.busy("Ouverture de l'installation…")
                 startInstaller(file)
+                messages.busy(null)
             }
         }
     }

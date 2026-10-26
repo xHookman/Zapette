@@ -102,7 +102,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // The other cards: downloaded now, decoded when they come on screen
             Images.prefetch(getApplication(), homePictures(firstCards = false))
         }
-        updates.checkApp(manual = false)
+        // Each start: a new version is offered (a moment later, once the screen is settled).
+        // Not over the first-start presentation: a new install is already up to date
+        launch {
+            delay(3_000)
+            if (!introShown) updates.checkApp(manual = false)
+        }
     }
 
     /**
