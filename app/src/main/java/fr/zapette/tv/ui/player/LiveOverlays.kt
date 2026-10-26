@@ -122,7 +122,7 @@ fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long,
                     Clock()
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        if (timeShift.live) "OK chaînes   ▲ infos   ◀ ▶ reculer, avancer" else "▼ revenir au direct   ◀ ▶ reculer, avancer",
+                        if (timeShift.live) "OK chaînes   OK maintenu : fiche   ◀ ▶ reculer, avancer" else "▼ revenir au direct   ◀ ▶ reculer, avancer",
                         style = ZType.Small, color = Z.Faint,
                     )
                 }
@@ -256,7 +256,7 @@ fun DelayedPill(t: TimeShift, modifier: Modifier) {
         Spacer(Modifier.width(10.dp))
         Text(delayText(t), style = ZType.Label, color = Color.White)
         Spacer(Modifier.width(14.dp))
-        Text("▼ direct", style = ZType.Small, color = Z.Muted)
+        Text("▼ ▼ direct", style = ZType.Small, color = Z.Muted)
     }
 }
 

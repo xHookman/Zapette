@@ -39,9 +39,10 @@ import kotlinx.coroutines.launch
  * Full-screen live TV: the overlays and the remote control.
  * The video itself is drawn by [LiveVideoLayer]; tuning is done by LivePlayback.
  *
- * Remote: CH+/CH− zap · digits = channel number (0 = previous) · OK = banner, then channel list
- * · ◀ ▶ go back / forward in time (hold to go faster) · Play/Pause · ▼ back to live
- * · ▲ programme sheet · Guide = channel list · Subtitles / Menu = subtitles, audio · Back = leave.
+ * Remote: CH+/CH− zap · digits = channel number (0 = previous) · ▲ ▼ = banner (what is on)
+ * · OK = banner, then channel list · OK held or Info = programme sheet
+ * · ◀ ▶ go back / forward in time (hold to go faster) · Play/Pause · ▼ with the banner = back to live
+ * · Guide = channel list · Subtitles / Menu = subtitles, audio · Back = leave.
  */
 @Composable
 fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
@@ -58,6 +59,10 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     var typed by remember { mutableStateOf("") }
     var bannerTimer by remember { mutableStateOf<Job?>(null) }
     var timeShift by remember { mutableStateOf(TimeShift()) }
+    // OK acts on release, to tell a press from a hold. Only a press that started here
+    // counts (the OK that opened the channel is released on this screen)
+    var okDown by remember { mutableStateOf(false) }
+    var okHeld by remember { mutableStateOf(false) }
     var seekFlash by remember { mutableStateOf<String?>(null) }
     var flashTimer by remember { mutableStateOf<Job?>(null) }
 
@@ -97,6 +102,28 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         }
         readTimeShift()
         showBanner()
+    }
+
+    /** Programme sheet (OK held, or Info). It replaces the banner: both at once overlapped. */
+    fun toggleSheet() {
+        programmeSheet = !programmeSheet
+        if (programmeSheet) {
+            banner = false
+            bannerTimer?.cancel()
+        } else {
+            showBanner()
+        }
+    }
+
+    /** OK released: a short press shows the banner, then the channel list. */
+    fun okPress() {
+        val player = playback.player
+        when {
+            playback.error != null -> playback.retry()
+            programmeSheet -> player?.let { openTrackMenu(vm, it) }
+            banner -> channelList = true
+            else -> showBanner()
+        }
     }
 
     fun zap(step: Int) {
@@ -152,11 +179,13 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             else -> 10_000L
         }
         when {
+            // OK is handled on release, to tell a press from a hold (see okPress)
             e.isOk() -> when {
-                playback.error != null -> playback.retry()
-                programmeSheet -> player?.let { openTrackMenu(vm, it) }
-                banner -> channelList = true
-                else -> showBanner()
+                e.repeatCount == 0 -> okDown = true
+                okDown && !okHeld -> {
+                    okHeld = true
+                    toggleSheet()
+                }
             }
             else -> when (e.keyCode) {
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> zap(+1)
@@ -172,23 +201,20 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                         showBanner()
                     }
                 }
+                // ▲ ▼: what is on. In time-shift, ▼ with the banner shown goes back to live
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if ((timeShift.delayMs > 0 || timeShift.paused) && typed.isEmpty()) {
+                    if (banner && !programmeSheet && (timeShift.delayMs > 0 || timeShift.paused)) {
                         playback.backToLive()
                         readTimeShift()
                     }
+                    programmeSheet = false
                     showBanner()
                 }
-                // The sheet replaces the banner (both at once overlapped)
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_INFO -> {
-                    programmeSheet = !programmeSheet
-                    if (programmeSheet) {
-                        banner = false
-                        bannerTimer?.cancel()
-                    } else {
-                        showBanner()
-                    }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    programmeSheet = false
+                    showBanner()
                 }
+                KeyEvent.KEYCODE_INFO -> toggleSheet()
                 KeyEvent.KEYCODE_GUIDE -> {
                     programmeSheet = false
                     channelList = true
@@ -208,7 +234,17 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 val e = event.nativeKeyEvent
-                if (event.type == KeyEventType.KeyDown) onKey(e) else e.isBack() || (!channelList && e.keyCode != KeyEvent.KEYCODE_UNKNOWN)
+                when {
+                    event.type == KeyEventType.KeyDown -> onKey(e)
+                    // Release of OK: a press if it was not held
+                    e.isOk() && !channelList -> {
+                        if (okDown && !okHeld) okPress()
+                        okDown = false
+                        okHeld = false
+                        true
+                    }
+                    else -> e.isBack() || (!channelList && e.keyCode != KeyEvent.KEYCODE_UNKNOWN)
+                }
             }
             .focusable()
     ) {
@@ -223,7 +259,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         LiveBanner(vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift, modifier = Modifier.align(Alignment.BottomCenter))
 
         // Not live: always said, even without the banner
-        if (timeShift.delayMs > 0 || timeShift.paused) {
+        if ((timeShift.delayMs > 0 || timeShift.paused) && typed.isEmpty()) {
             DelayedPill(timeShift, Modifier.align(Alignment.TopEnd))
         }
         seekFlash?.let { SeekFlash(it, Modifier.align(Alignment.Center)) }

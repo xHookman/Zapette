@@ -38,7 +38,7 @@ private val Tips = listOf(
     "CH+  CH−" to "Zapper",
     "◀  ▶" to "En direct : reculer ou avancer dans le temps",
     "1 … 9" to "Aller à une chaîne  ·  0 : chaîne précédente",
-    "OK maintenu" to "Options d'une vidéo (favoris…)",
+    "OK maintenu" to "En direct : fiche du programme  ·  ailleurs : options",
 )
 
 /**
