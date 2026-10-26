@@ -9,6 +9,7 @@ import fr.zapette.tv.data.Store
 import fr.zapette.tv.engine.AddonEngine
 import fr.zapette.tv.engine.AppUpdater
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -49,10 +50,19 @@ class Updates(
         }
     }
 
+    /** Waiting for the user to allow Zapette to install apps, in the system settings. */
+    private var waitingPermission: AppUpdater.Release? = null
+
+    /** Set while the system installer is on screen (Zapette goes to the background). */
+    private var installerShown = false
+
     private fun installApp(release: AppUpdater.Release) = scope.launch {
         if (!updater.canInstall()) {
-            messages.toast("Autorisation nécessaire", "Autorisez Zapette à installer des applications, puis relancez la mise à jour.")
+            // The install carries on by itself when the user comes back from the settings
+            waitingPermission = release
+            messages.toast("Autorisation nécessaire", "Autorisez Zapette à installer des applications : l'installation reprendra ensuite.")
             if (!updater.openInstallPermission()) {
+                waitingPermission = null
                 messages.toast("Autorisation nécessaire", "Paramètres → Applications → Zapette → Installer des applications inconnues.", error = true)
             }
             return@launch
@@ -68,9 +78,38 @@ class Updates(
                 file.delete()
                 messages.toast("Mise à jour refusée", problem, error = true)
             } else {
-                runCatching { updater.install(file) }
-                    .onFailure { messages.toast("Installation impossible", it.message ?: "", error = true) }
+                startInstaller(file)
             }
+        }
+    }
+
+    /**
+     * Hands the APK to the system installer. Some TVs drop the first request (the
+     * installer never shows): if Zapette is still on screen a moment later, ask again once.
+     */
+    private suspend fun startInstaller(file: java.io.File) {
+        installerShown = false
+        repeat(2) {
+            runCatching { updater.install(file) }.onFailure {
+                messages.toast("Installation impossible", it.message ?: "", error = true)
+                return
+            }
+            delay(4_000)
+            if (installerShown) return
+        }
+    }
+
+    /** Zapette goes to the background (the installer or the settings took the screen). */
+    fun onAppStop() {
+        installerShown = true
+    }
+
+    /** Back in Zapette: carries on with an install that was waiting for the permission. */
+    fun onAppStart() {
+        val release = waitingPermission ?: return
+        if (updater.canInstall()) {
+            waitingPermission = null
+            installApp(release)
         }
     }
 

@@ -307,8 +307,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         playback.channel?.let { watch(it) }
     }
 
-    fun onAppStop() = playback.onAppStop()
-    fun onAppStart() = playback.onAppStart()
+    fun onAppStop() {
+        playback.onAppStop()
+        updates.onAppStop()
+    }
+
+    fun onAppStart() {
+        playback.onAppStart()
+        updates.onAppStart()
+    }
 
     // ------------------------------------------------------------ add-on items
     fun open(item: PluginItem, parentTitle: String = "") {

@@ -83,7 +83,7 @@ fun SettingsScreen(vm: AppViewModel) {
     val selectedPage = remember { FocusRequester() }
 
     LaunchedEffect(addonRevision) {
-        schema = runCatching { vm.engine.settingsSchema() }.getOrElse { emptyList() }
+        schema = runCatching { accountsAfterGeneral(vm.engine.settingsSchema()) }.getOrElse { emptyList() }
         vm.updates.refreshAddonInfo()
         // Opened from the first-start invitation: straight to the accounts
         if (vm.settingsTarget == AppViewModel.SettingsTarget.Accounts) {
@@ -346,6 +346,13 @@ private fun PageTab(label: String, selected: Boolean, modifier: Modifier = Modif
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
         )
     }
+}
+
+/** The accounts page is the one people look for: right after the first page ("Général"). */
+private fun accountsAfterGeneral(categories: List<SettingCategory>): List<SettingCategory> {
+    val accounts = categories.firstOrNull { accountsOf(it.entries).isNotEmpty() } ?: return categories
+    val others = categories.filter { it !== accounts }
+    return others.take(1) + accounts + others.drop(1)
 }
 
 /** A service of the add-on that needs a login (TF1+, 6play, RMC+…). */
