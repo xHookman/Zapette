@@ -10,7 +10,7 @@ import fr.zapette.tv.data.Stream
 
 /** The tabs of the top bar. */
 enum class Tab(val label: String) {
-    Home("Accueil"), Live("Chaînes"), Guide("Guide TV"), Replay("Replay"), Explore("Explorer"), Settings("Réglages")
+    Home("Accueil"), Guide("Guide TV"), Replay("Replay"), Explore("Explorer"), Settings("Réglages")
 }
 
 /** What a player screen must play. */

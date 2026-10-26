@@ -14,7 +14,7 @@ Pour être honnête : cette application est vibecodée. Je l'ai faite avec une I
 
 - Le direct, avec les chaînes numérotées comme sur la TNT. CH+ / CH− pour zapper, on tape le numéro pour aller sur une chaîne.
 - Au lancement, l'application reprend la dernière chaîne regardée.
-- Le guide TV d'aujourd'hui et de demain.
+- Le guide TV d'aujourd'hui et de demain, qui sert aussi de liste des chaînes. Sur les chaînes qui le permettent, choisir une émission déjà passée la reprend à son début.
 - Le replay, avec toute l'arborescence de l'extension.
 - Un mini-lecteur : en faisant Retour, la chaîne continue dans un coin pendant qu'on navigue.
 - Les mises à jour de l'application et de l'extension se font depuis les réglages.

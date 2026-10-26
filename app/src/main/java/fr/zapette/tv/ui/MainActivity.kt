@@ -44,7 +44,6 @@ import fr.zapette.tv.ui.screens.BrowseScreen
 import fr.zapette.tv.ui.screens.GuideScreen
 import fr.zapette.tv.ui.screens.HomeScreen
 import fr.zapette.tv.ui.screens.IntroScreen
-import fr.zapette.tv.ui.screens.LiveScreen
 import fr.zapette.tv.ui.screens.SettingsScreen
 import fr.zapette.tv.ui.screens.SplashScreen
 import fr.zapette.tv.ui.theme.Z
@@ -167,7 +166,6 @@ private fun Tabs(vm: AppViewModel) {
             key(vm.tab) {
                 when (vm.tab) {
                     Tab.Home -> HomeScreen(vm)
-                    Tab.Live -> LiveScreen(vm)
                     Tab.Guide -> GuideScreen(vm)
                     Tab.Replay -> vm.replayRoot?.let { BrowseScreen(vm, it, embedded = true) }
                     Tab.Explore -> BrowseScreen(vm, vm.exploreRoot, embedded = true)

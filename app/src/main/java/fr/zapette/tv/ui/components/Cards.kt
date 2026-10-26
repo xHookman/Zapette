@@ -108,42 +108,6 @@ fun LiveCard(
     }
 }
 
-/** Tile of the channels grid: logo, number and what is on air. */
-@Composable
-fun ChannelTile(
-    channel: Channel,
-    programme: Programme?,
-    now: Long,
-    onClick: () -> Unit,
-    onFocus: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    FocusSurface(onClick = onClick, onFocus = onFocus, shape = CardShape, modifier = modifier, focusedScale = 1.05f) { focused ->
-        Column(Modifier.fillMaxWidth().padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelLogo(channel.logo, size = 52.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    SingleLine(channel.label, ZType.Label, Z.Text)
-                    Text("${channel.number}", style = ZType.Number.copy(fontSize = 13.sp), color = if (focused) Z.Live else Z.Faint)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            SingleLine(programme?.title ?: "Programme non communiqué", ZType.Body.copy(fontSize = 14.sp), if (programme != null) Z.Text else Z.Faint)
-            Spacer(Modifier.height(8.dp))
-            if (programme != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ProgressLine(programme.progress(now), Modifier.weight(1f), height = 3.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Text(Fmt.time(programme.stop), style = ZType.Small, color = Z.Muted)
-                }
-            } else {
-                Spacer(Modifier.height(16.dp))
-            }
-        }
-    }
-}
-
 /** Generic add-on item (programme, episode, folder…). */
 @Composable
 fun MediaCard(

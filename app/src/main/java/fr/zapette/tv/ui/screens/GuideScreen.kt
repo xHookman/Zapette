@@ -1,5 +1,8 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package fr.zapette.tv.ui.screens
 
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +20,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,8 +47,8 @@ import fr.zapette.tv.live.LiveTv
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.components.ChannelLogo
 import fr.zapette.tv.ui.components.EmptyState
-import fr.zapette.tv.ui.components.FocusSurface
 import fr.zapette.tv.ui.components.Fmt
+import fr.zapette.tv.ui.components.FocusSurface
 import fr.zapette.tv.ui.components.LiveBadge
 import fr.zapette.tv.ui.components.ProgressLine
 import fr.zapette.tv.ui.components.SingleLine
@@ -47,111 +56,168 @@ import fr.zapette.tv.ui.components.Spinner
 import fr.zapette.tv.ui.components.restoreFocus
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
-import kotlinx.coroutines.delay
 import java.util.Calendar
+import kotlinx.coroutines.delay
 
-/** Two-pane TV guide: channels on the left, the day's schedule on the right. */
+/**
+ * The TV guide, which is also the channel list: channels on the left, the day's
+ * schedule of the focused channel on the right.
+ *
+ * Kept light for weak TVs: the schedule only appears once the focus rests on a
+ * channel, and moving in the channel list never rebuilds it.
+ */
 @Composable
 fun GuideScreen(vm: AppViewModel) {
     val channels by vm.live.channels.collectAsState()
-    val epg by vm.live.guide.collectAsState()
-    val now by vm.live.now.collectAsState()
-
     if (channels.isEmpty()) {
         EmptyState("Guide indisponible", "Aucune chaîne n'est configurée.")
         return
     }
-    var selectedId by remember { mutableStateOf(vm.guideFocusId ?: vm.store.lastChannelId ?: channels.first().id) }
+    var focusedId by remember { mutableStateOf(vm.guideFocusId ?: vm.store.lastChannelId ?: channels.first().id) }
     var day by remember { mutableIntStateOf(0) }
-    // The schedule follows the focus once it rests on a channel: rebuilding it at
-    // every D-pad step made scrolling the channels stutter
-    var scheduleId by remember { mutableStateOf(selectedId) }
-    LaunchedEffect(selectedId) {
-        delay(160)
-        scheduleId = selectedId
-    }
-    val selected = channels.firstOrNull { it.id == scheduleId } ?: channels.first()
 
-    val dayStart = remember(day) {
-        Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, day)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis / 1000
-    }
-    val programmes = remember(epg, selected.xmltvId, dayStart) {
-        epg[selected.xmltvId].orEmpty().filter { it.stop > dayStart && it.start < dayStart + 86_400 }
+    // The schedule follows the focus once it rests on a channel (and not at once
+    // when the tab opens: switching tab stays instant)
+    var scheduleId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focusedId) {
+        delay(SCHEDULE_DELAY_MS)
+        scheduleId = focusedId
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp, bottom = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Guide TV", style = ZType.Headline, color = Z.Text)
-            Spacer(Modifier.width(14.dp))
-            Text(Fmt.day(dayStart + 43_200), style = ZType.Label, color = Z.Muted)
-            Spacer(Modifier.weight(1f))
-            DayChip("Aujourd'hui", day == 0) { day = 0 }
-            Spacer(Modifier.width(8.dp))
-            DayChip("Demain", day == 1) { day = 1 }
-        }
+    LaunchedEffect(Unit) { vm.backdrop = null }
 
+    // Coming down from the tabs, the focus goes to the channel list, on the current channel
+    val channelFocus = remember { ChannelFocus() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .focusProperties { enter = { channelFocus.target() } }
+            .focusGroup()
+    ) {
+        GuideHeader(day) { day = it }
         Row(Modifier.fillMaxSize().padding(start = Z.Gutter, end = Z.Gutter)) {
-            // ----------------------------------------------------- channels
-            LazyColumn(
-                state = vm.guideChannels,
-                modifier = Modifier.width(310.dp).fillMaxHeight(),
-                contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(channels, key = { it.id }, contentType = { "channel" }) { c ->
-                    GuideChannelRow(
-                        c, vm.live.nowPlaying(c, now), selected = c.id == selectedId,
-                        onClick = { vm.watch(c) },
-                        onFocus = { selectedId = c.id; vm.guideFocusId = c.id; vm.backdrop = null },
-                        modifier = Modifier.restoreFocus(vm.restoreFocus && c.id == selectedId) { vm.restoreFocus = false },
-                    )
-                }
-            }
+            ChannelPane(vm, channels, focusedId, channelFocus) { focusedId = it }
             Spacer(Modifier.width(24.dp))
-            // --------------------------------------------------- schedule
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                if (programmes.isEmpty()) {
-                    Column(Modifier.padding(top = 24.dp)) {
-                        if (epg.isEmpty()) {
-                            Spinner(size = 28.dp)
-                            Spacer(Modifier.height(12.dp))
-                            Text("Chargement du guide…", style = ZType.Body, color = Z.Muted)
-                        } else {
-                            Text("Pas de programme communiqué pour ${selected.label}.", style = ZType.Body, color = Z.Muted)
-                        }
-                    }
-                } else {
-                    val listState = rememberLazyListState()
-                    LaunchedEffect(selected.id, day, programmes.size) {
-                        val index = programmes.indexOfFirst { it.stop > now }.coerceAtLeast(0)
-                        listState.scrollToItem((index - 1).coerceAtLeast(0))
-                    }
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        items(programmes, key = { it.start }, contentType = { "programme" }) { p ->
-                            ProgrammeRow(p, now, onClick = {
-                                when {
-                                    p.isOnAt(LiveTv.nowSeconds()) -> vm.watch(selected)
-                                    p.stop <= now -> vm.messages.toast(p.title, "Programme terminé. Retrouvez-le peut-être dans Replay.")
-                                    else -> vm.messages.toast(p.title, "Diffusion à ${Fmt.time(p.start)} sur ${selected.label}")
-                                }
-                            })
-                        }
-                    }
-                }
+                val shown = channels.firstOrNull { it.id == scheduleId }
+                if (shown != null) key(shown.id, day) { SchedulePane(vm, shown, day) }
             }
         }
     }
 }
+
+/** Remembers whether the focused channel's row is on screen, to send the focus there. */
+private class ChannelFocus {
+    val requester = FocusRequester()
+    var attached = false
+
+    fun target(): FocusRequester = if (attached) requester else FocusRequester.Default
+}
+
+@Composable
+private fun GuideHeader(day: Int, onDay: (Int) -> Unit) {
+    val dayStart = remember(day) { dayStart(day) }
+    Row(
+        Modifier.padding(start = Z.Gutter, end = Z.Gutter, top = 12.dp, bottom = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Guide TV", style = ZType.Headline, color = Z.Text)
+        Spacer(Modifier.width(14.dp))
+        Text(Fmt.day(dayStart + 43_200), style = ZType.Label, color = Z.Muted)
+        Spacer(Modifier.weight(1f))
+        DayChip("Aujourd'hui", day == 0) { onDay(0) }
+        Spacer(Modifier.width(8.dp))
+        DayChip("Demain", day == 1) { onDay(1) }
+    }
+}
+
+@Composable
+private fun ChannelPane(
+    vm: AppViewModel,
+    channels: List<Channel>,
+    focusedId: String,
+    channelFocus: ChannelFocus,
+    onFocused: (String) -> Unit,
+) {
+    val now by vm.live.now.collectAsState()
+    LazyColumn(
+        state = vm.guideChannels,
+        modifier = Modifier.width(310.dp).fillMaxHeight(),
+        contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(channels, key = { it.id }, contentType = { "channel" }) { c ->
+            val isFocused = c.id == focusedId
+            if (isFocused) {
+                DisposableEffect(Unit) {
+                    channelFocus.attached = true
+                    onDispose { channelFocus.attached = false }
+                }
+            }
+            GuideChannelRow(
+                c, vm.live.nowPlaying(c, now), selected = isFocused,
+                onClick = { vm.watch(c) },
+                onFocus = {
+                    onFocused(c.id)
+                    vm.guideFocusId = c.id
+                },
+                modifier = (if (isFocused) Modifier.focusRequester(channelFocus.requester) else Modifier)
+                    .restoreFocus(vm.restoreFocus && isFocused) { vm.restoreFocus = false },
+            )
+        }
+    }
+}
+
+/** The day's programmes of one channel, opened on the one on air. */
+@Composable
+private fun SchedulePane(vm: AppViewModel, channel: Channel, day: Int) {
+    val guide by vm.live.guide.collectAsState()
+    val now by vm.live.now.collectAsState()
+    val programmes = remember(guide, channel.xmltvId, day) {
+        val start = dayStart(day)
+        guide[channel.xmltvId].orEmpty().filter { it.stop > start && it.start < start + 86_400 }
+    }
+    if (programmes.isEmpty()) {
+        Column(Modifier.padding(top = 24.dp)) {
+            if (guide.isEmpty()) {
+                Spinner(size = 28.dp)
+                Spacer(Modifier.height(12.dp))
+                Text("Chargement du guide…", style = ZType.Body, color = Z.Muted)
+            } else {
+                Text("Pas de programme communiqué pour ${channel.label}.", style = ZType.Body, color = Z.Muted)
+            }
+        }
+        return
+    }
+    val onAir = programmes.indexOfFirst { it.stop > now }.coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (onAir - 1).coerceAtLeast(0))
+    LazyColumn(
+        state = listState,
+        contentPadding = PaddingValues(bottom = 48.dp, top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(programmes, key = { it.start }, contentType = { "programme" }) { p ->
+            ProgrammeRow(p, now, onClick = {
+                val nowSec = LiveTv.nowSeconds()
+                when {
+                    p.isOnAt(nowSec) -> vm.watch(channel)
+                    // Already broadcast: from its start, if the channel still has it
+                    p.stop <= nowSec -> vm.watchFrom(channel, p.start, p.title)
+                    else -> vm.messages.toast(p.title, "Diffusion à ${Fmt.time(p.start)} sur ${channel.label}")
+                }
+            })
+        }
+    }
+}
+
+/** Midnight of today + [day], in epoch seconds. */
+private fun dayStart(day: Int): Long = Calendar.getInstance().apply {
+    add(Calendar.DAY_OF_YEAR, day)
+    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+}.timeInMillis / 1000
+
+private const val SCHEDULE_DELAY_MS = 350L
 
 @Composable
 private fun DayChip(label: String, selected: Boolean, onClick: () -> Unit) {

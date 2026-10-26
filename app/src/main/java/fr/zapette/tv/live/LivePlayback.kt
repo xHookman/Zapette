@@ -38,6 +38,8 @@ class LivePlayback(
     private val live: LiveTv,
     private val scope: CoroutineScope,
     private val subtitlesOn: () -> Boolean,
+    /** A short message for the user (toast). */
+    private val notify: (title: String, message: String) -> Unit,
 ) {
     var player by mutableStateOf<ExoPlayer?>(null)
         private set
@@ -90,6 +92,7 @@ class LivePlayback(
         if (channel.id == channelId && error == null && p.playbackState != Player.STATE_IDLE) {
             shownId = channel.id
             p.play()
+            if (p.playbackState == Player.STATE_READY) applyStartAt()
         } else {
             tune(channel)
         }
@@ -104,6 +107,7 @@ class LivePlayback(
         error = null
         retried = isRetry
         resetTimeShift()
+        if (startAt?.channelId != channel.id) startAt = null
         startSnow()
         tuneJob?.cancel()
         tuneJob = scope.launch {
@@ -229,6 +233,32 @@ class LivePlayback(
         pausedAt = 0
     }
 
+    /** A programme to start from its beginning, once the channel plays. */
+    private class StartAt(val channelId: String, val epochMs: Long, val title: String)
+
+    private var startAt: StartAt? = null
+
+    /** Asks to play [channel] from [epochMs] (a programme of the guide already broadcast). */
+    fun startAt(channel: Channel, epochMs: Long, title: String) {
+        startAt = StartAt(channel.id, epochMs, title)
+    }
+
+    /** Goes back to the requested programme start, as far as the channel allows. */
+    private fun applyStartAt() {
+        val request = startAt ?: return
+        if (request.channelId != channelId) return
+        startAt = null
+        val back = System.currentTimeMillis() - request.epochMs
+        when {
+            !canTimeShift -> notify(request.title, "Cette chaîne ne permet pas de revenir en arrière : lecture en direct.")
+            back > windowMs() -> {
+                seekBy(-windowMs())
+                notify(request.title, "Le début n'est plus disponible : lecture au plus tôt possible.")
+            }
+            else -> seekBy(-back)
+        }
+    }
+
     // -------------------------------------------------------- app in background
     /** The TV goes to standby / another app opens: stop the stream (it would be stale anyway). */
     fun onAppStop() {
@@ -262,7 +292,10 @@ class LivePlayback(
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
             when (state) {
-                Player.STATE_READY -> loading = false
+                Player.STATE_READY -> {
+                    loading = false
+                    applyStartAt()
+                }
                 Player.STATE_BUFFERING -> loading = true
                 else -> Unit
             }

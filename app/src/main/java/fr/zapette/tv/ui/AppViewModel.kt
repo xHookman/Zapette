@@ -2,7 +2,6 @@ package fr.zapette.tv.ui
 
 import android.app.Application
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +41,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val store = services.store
     val messages = Messages(viewModelScope)
     val live = LiveTv(app, engine, store, viewModelScope)
-    val playback = LivePlayback(app, engine, store, live, viewModelScope) { subtitlesOn }
+    val playback = LivePlayback(
+        app, engine, store, live, viewModelScope,
+        subtitlesOn = { subtitlesOn },
+        notify = { title, message -> messages.toast(title, message) },
+    )
     val updates = Updates(
         app, store, engine, messages, viewModelScope,
         onAddonChanged = ::reloadAddonContent,
@@ -264,10 +267,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     var restoreFocus by mutableStateOf(true)
     var homeFocusKey: String? = null
-    var liveFocusId: String? = null
     var guideFocusId: String? = null
     val homeList = LazyListState()
-    val liveGrid = LazyGridState()
     val guideChannels = LazyListState()
     private val rows = HashMap<String, LazyListState>()
     fun row(key: String): LazyListState = rows.getOrPut(key) { LazyListState() }
@@ -300,6 +301,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun watch(channel: Channel) {
         playback.ensurePlayer()   // the video layer exists from the first frame
         push(Route.Player(PlayerRequest.Live(channel.id)))
+    }
+
+    /**
+     * A programme already broadcast, from its start: the channel is opened, then
+     * goes back in time to [startSec] if it still keeps that moment.
+     */
+    fun watchFrom(channel: Channel, startSec: Long, title: String) {
+        playback.startAt(channel, startSec * 1000, title)
+        watch(channel)
     }
 
     /** Full screen again on the channel of the corner mini-player. */
