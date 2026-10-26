@@ -80,7 +80,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         timeShift = TimeShift(
             delayMs = playback.delayMs(),
             windowMs = playback.windowMs(),
-            paused = playback.player?.let { !it.playWhenReady } == true,
+            paused = playback.paused,
         )
     }
 
@@ -179,10 +179,11 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                     }
                     showBanner()
                 }
+                // The sheet replaces the banner (both at once overlapped)
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_INFO -> {
                     programmeSheet = !programmeSheet
                     if (programmeSheet) {
-                        banner = true
+                        banner = false
                         bannerTimer?.cancel()
                     } else {
                         showBanner()
@@ -219,7 +220,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             playback.loading -> LoadingOverlay(shown)
         }
 
-        LiveBanner(vm, shown, visible = banner, now = now, timeShift = timeShift, modifier = Modifier.align(Alignment.BottomCenter))
+        LiveBanner(vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift, modifier = Modifier.align(Alignment.BottomCenter))
 
         // Not live: always said, even without the banner
         if (timeShift.delayMs > 0 || timeShift.paused) {
@@ -230,7 +231,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         AnimatedVisibility(
             programmeSheet && shown != null, modifier = Modifier.align(Alignment.CenterEnd),
             enter = slideInHorizontally { it } + fadeIn(), exit = slideOutHorizontally { it } + fadeOut(),
-        ) { shown?.let { ProgrammeSheet(vm, it, now) } }
+        ) { shown?.let { ProgrammeSheet(vm, it, now - timeShift.delayMs / 1000) } }
 
         AnimatedVisibility(
             channelList, modifier = Modifier.align(Alignment.CenterStart),

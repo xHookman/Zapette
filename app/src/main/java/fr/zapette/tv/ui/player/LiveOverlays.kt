@@ -55,7 +55,6 @@ import kotlinx.coroutines.delay
 
 /** Where the picture is in the channel's recording window. */
 data class TimeShift(val delayMs: Long = 0, val windowMs: Long = 0, val paused: Boolean = false) {
-    val available get() = windowMs > 0
     val live get() = delayMs == 0L && !paused
 }
 
@@ -109,10 +108,6 @@ fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long,
                             Spacer(Modifier.width(12.dp))
                             Text(Fmt.remaining(current.stop, at), style = ZType.Small, color = Z.Muted)
                         }
-                    }
-                    if (timeShift.available) {
-                        Spacer(Modifier.height(10.dp))
-                        TimeShiftBar(timeShift)
                     }
                     if (next != null) {
                         Spacer(Modifier.height(10.dp))
@@ -248,20 +243,6 @@ fun NumberBox(typed: String, match: Channel?, modifier: Modifier) {
 
 private fun delayText(t: TimeShift): String =
     (if (t.paused) "En pause" else "Différé") + if (t.delayMs > 0) "  −" + Fmt.clock(t.delayMs) else ""
-
-/** The recording window of the channel, with the live point at the right end. */
-@Composable
-private fun TimeShiftBar(t: TimeShift) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("−" + Fmt.clock(t.windowMs), style = ZType.Small, color = Z.Faint)
-        Spacer(Modifier.width(10.dp))
-        ProgressLine(
-            1f - t.delayMs.toFloat() / t.windowMs, Modifier.width(420.dp), color = if (t.live) Z.Live else Z.Gold, height = 3.dp,
-        )
-        Spacer(Modifier.width(10.dp))
-        Text("direct", style = ZType.Small, color = Z.Faint)
-    }
-}
 
 /** Shown while the picture is not live: the user must always know it. */
 @Composable

@@ -1,12 +1,12 @@
 package fr.zapette.tv.live
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import fr.zapette.tv.data.Channel
 import fr.zapette.tv.data.Store
@@ -103,6 +103,7 @@ class LivePlayback(
         shownId = channel.id
         error = null
         retried = isRetry
+        resetTimeShift()
         startSnow()
         tuneJob?.cancel()
         tuneJob = scope.launch {
@@ -169,14 +170,19 @@ class LivePlayback(
     val canTimeShift: Boolean
         get() = player?.let { it.isCurrentMediaItemLive && it.isCurrentMediaItemSeekable } == true
 
+    // The delay is counted from what the user did (jumps, pause), not read from the
+    // player: the player's own position drifts by a few seconds around the live point,
+    // and "live" must be shown exactly when the user comes back to it.
+    private var shiftMs = 0L          // behind live because of the jumps
+    private var pausedAt = 0L         // when the pause started (0: playing)
+
+    val paused: Boolean get() = pausedAt != 0L
+
     /** How far behind the live point the picture is, in ms (0 = live). */
     fun delayMs(): Long {
-        val p = player ?: return 0
         if (!canTimeShift) return 0
-        val window = p.currentTimeline.takeIf { !it.isEmpty }
-            ?.getWindow(p.currentMediaItemIndex, Timeline.Window()) ?: return 0
-        val delay = window.defaultPositionMs - p.currentPosition
-        return if (delay < LIVE_MARGIN_MS) 0 else delay
+        val pause = if (paused) SystemClock.elapsedRealtime() - pausedAt else 0
+        return (shiftMs + pause).coerceAtMost(windowMs())
     }
 
     /** Length of the window the user can go back into, in ms. */
@@ -186,26 +192,41 @@ class LivePlayback(
     fun seekBy(ms: Long): Boolean {
         val p = player ?: return false
         if (!canTimeShift) return false
-        if (ms > 0 && delayMs() <= ms) {
+        val delay = delayMs() - ms
+        if (delay <= 0) {
             backToLive()
-        } else {
-            p.seekTo((p.currentPosition + ms).coerceIn(0, windowMs()))
+            return true
         }
+        p.seekTo((p.currentPosition + ms).coerceIn(0, windowMs()))
+        shiftMs = delay.coerceAtMost(windowMs())
+        if (paused) pausedAt = SystemClock.elapsedRealtime()
         return true
     }
 
     fun backToLive() {
-        val p = player ?: return
-        p.seekToDefaultPosition()
-        p.play()
+        resetTimeShift()
+        player?.seekToDefaultPosition()
+        player?.play()
     }
 
     /** Pause on a live channel: it then continues from where it stopped. */
     fun togglePause(): Boolean {
         val p = player ?: return false
         if (!canTimeShift) return false
-        if (p.isPlaying) p.pause() else p.play()
+        if (paused) {
+            shiftMs = delayMs()
+            pausedAt = 0
+            p.play()
+        } else {
+            pausedAt = SystemClock.elapsedRealtime()
+            p.pause()
+        }
         return true
+    }
+
+    private fun resetTimeShift() {
+        shiftMs = 0
+        pausedAt = 0
     }
 
     // -------------------------------------------------------- app in background
@@ -255,6 +276,7 @@ class LivePlayback(
             when {
                 // Paused too long behind the live point: jump back to live
                 e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
+                    resetTimeShift()
                     p.seekToDefaultPosition()
                     p.prepare()
                 }
@@ -303,7 +325,5 @@ class LivePlayback(
 
     private companion object {
         const val MIN_SNOW_MS = 380L
-        /** Closer than this to the live point counts as live (segments arrive by a few seconds). */
-        const val LIVE_MARGIN_MS = 8_000L
     }
 }
