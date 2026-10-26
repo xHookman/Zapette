@@ -26,6 +26,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import fr.zapette.tv.data.Channel
 import fr.zapette.tv.ui.AppViewModel
+import fr.zapette.tv.ui.components.Fmt
 import fr.zapette.tv.ui.NumberEntry
 import fr.zapette.tv.ui.digit
 import fr.zapette.tv.ui.isBack
@@ -39,7 +40,8 @@ import kotlinx.coroutines.launch
  * The video itself is drawn by [LiveVideoLayer]; tuning is done by LivePlayback.
  *
  * Remote: CH+/CH− zap · digits = channel number (0 = previous) · OK = banner, then channel list
- * · ◀ channel list · ▶ programme sheet · Subtitles / Menu = subtitles, audio · Back = leave.
+ * · ◀ ▶ go back / forward in time (hold to go faster) · Play/Pause · ▼ back to live
+ * · ▲ programme sheet · Guide = channel list · Subtitles / Menu = subtitles, audio · Back = leave.
  */
 @Composable
 fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
@@ -55,6 +57,9 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     var programmeSheet by remember { mutableStateOf(false) }
     var typed by remember { mutableStateOf("") }
     var bannerTimer by remember { mutableStateOf<Job?>(null) }
+    var timeShift by remember { mutableStateOf(TimeShift()) }
+    var seekFlash by remember { mutableStateOf<String?>(null) }
+    var flashTimer by remember { mutableStateOf<Job?>(null) }
 
     fun showBanner() {
         banner = true
@@ -68,6 +73,30 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     fun tune(channel: Channel) {
         playback.tune(channel)
         if (vm.store.bannerOnZap) showBanner()
+    }
+
+    /** Time-shift state, read from the player twice a second. */
+    fun readTimeShift() {
+        timeShift = TimeShift(
+            delayMs = playback.delayMs(),
+            windowMs = playback.windowMs(),
+            paused = playback.player?.let { !it.playWhenReady } == true,
+        )
+    }
+
+    fun seek(ms: Long) {
+        if (!playback.seekBy(ms)) {
+            vm.messages.toast("Pas de retour en arrière", "Cette chaîne ne permet pas de revenir dans le temps.")
+            return
+        }
+        seekFlash = (if (ms > 0) "+" else "−") + Fmt.minutesSeconds(kotlin.math.abs(ms))
+        flashTimer?.cancel()
+        flashTimer = scope.launch {
+            delay(900)
+            seekFlash = null
+        }
+        readTimeShift()
+        showBanner()
     }
 
     fun zap(step: Int) {
@@ -87,6 +116,12 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         runCatching { focus.requestFocus() }
         live.channel(channelId)?.let { playback.open(it) }
         showBanner()
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            readTimeShift()
+            delay(500)
+        }
     }
 
     fun onKey(e: KeyEvent): Boolean {
@@ -110,6 +145,12 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         }
         if (channelList) return false            // the list handles the arrows itself
         val player = playback.player
+        // Held key: 10 s, then 30 s, then 1 min per step
+        val step = when {
+            e.repeatCount > 6 -> 60_000L
+            e.repeatCount > 0 -> 30_000L
+            else -> 10_000L
+        }
         when {
             e.isOk() -> when {
                 playback.error != null -> playback.retry()
@@ -120,13 +161,25 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             else -> when (e.keyCode) {
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> zap(+1)
                 KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> zap(-1)
-                // The arrows never zap (on purpose): they only show the banner
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> if (!programmeSheet) showBanner()
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_GUIDE -> {
-                    programmeSheet = false
-                    channelList = true
+                // Time-shift, as in Kodi. The arrows never zap (on purpose)
+                KeyEvent.KEYCODE_DPAD_LEFT -> seek(-step)
+                KeyEvent.KEYCODE_DPAD_RIGHT -> seek(step)
+                KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-30_000)
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(30_000)
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    if (playback.togglePause()) {
+                        readTimeShift()
+                        showBanner()
+                    }
                 }
-                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO -> {
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if ((timeShift.delayMs > 0 || timeShift.paused) && typed.isEmpty()) {
+                        playback.backToLive()
+                        readTimeShift()
+                    }
+                    showBanner()
+                }
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_INFO -> {
                     programmeSheet = !programmeSheet
                     if (programmeSheet) {
                         banner = true
@@ -134,6 +187,10 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                     } else {
                         showBanner()
                     }
+                }
+                KeyEvent.KEYCODE_GUIDE -> {
+                    programmeSheet = false
+                    channelList = true
                 }
                 KeyEvent.KEYCODE_LAST_CHANNEL -> playback.previousChannel()
                 KeyEvent.KEYCODE_MENU -> player?.let { openTrackMenu(vm, it) }
@@ -162,7 +219,13 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             playback.loading -> LoadingOverlay(shown)
         }
 
-        LiveBanner(vm, shown, visible = banner, now = now, modifier = Modifier.align(Alignment.BottomCenter))
+        LiveBanner(vm, shown, visible = banner, now = now, timeShift = timeShift, modifier = Modifier.align(Alignment.BottomCenter))
+
+        // Not live: always said, even without the banner
+        if (timeShift.delayMs > 0 || timeShift.paused) {
+            DelayedPill(timeShift, Modifier.align(Alignment.TopEnd))
+        }
+        seekFlash?.let { SeekFlash(it, Modifier.align(Alignment.Center)) }
 
         AnimatedVisibility(
             programmeSheet && shown != null, modifier = Modifier.align(Alignment.CenterEnd),

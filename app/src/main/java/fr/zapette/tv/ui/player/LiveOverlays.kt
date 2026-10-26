@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,18 +53,26 @@ import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
 import kotlinx.coroutines.delay
 
+/** Where the picture is in the channel's recording window. */
+data class TimeShift(val delayMs: Long = 0, val windowMs: Long = 0, val paused: Boolean = false) {
+    val available get() = windowMs > 0
+    val live get() = delayMs == 0L && !paused
+}
+
 private val BannerShade = Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color(0xB3000000), 1f to Color(0xF2000000))
 
 /** Bottom banner: channel, programme on air with its progress, and what comes next. */
 @Composable
-fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long, modifier: Modifier) {
+fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long, timeShift: TimeShift, modifier: Modifier) {
     AnimatedVisibility(
         visible = visible && channel != null, modifier = modifier,
         enter = slideInVertically { it / 3 } + fadeIn(), exit = slideOutVertically { it / 3 } + fadeOut(),
     ) {
         val c = channel ?: return@AnimatedVisibility
-        val current = vm.live.nowPlaying(c, now)
-        val next = vm.live.nextUp(c, now)
+        // What is on screen: earlier than now when the user went back in time
+        val at = now - timeShift.delayMs / 1000
+        val current = vm.live.nowPlaying(c, at)
+        val next = vm.live.nextUp(c, at)
         val tuning = vm.playback.channelId != c.id || vm.playback.loading
         Box(Modifier.fillMaxWidth().background(BannerShade)) {
             Row(
@@ -78,7 +87,7 @@ fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long,
                         Spacer(Modifier.width(8.dp))
                         Text(c.label, style = ZType.Label, color = Z.Muted)
                         Spacer(Modifier.width(10.dp))
-                        LiveBadge()
+                        if (timeShift.live) LiveBadge() else Pill(delayText(timeShift), color = Z.Gold, textColor = Color.Black)
                         if (vm.subtitlesOn) {
                             Spacer(Modifier.width(8.dp))
                             Pill("Sous-titres")
@@ -96,10 +105,14 @@ fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long,
                         Text(meta, style = ZType.Label, color = Z.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            ProgressLine(current.progress(now), Modifier.width(420.dp))
+                            ProgressLine(current.progress(at), Modifier.width(420.dp))
                             Spacer(Modifier.width(12.dp))
-                            Text(Fmt.remaining(current.stop, now), style = ZType.Small, color = Z.Muted)
+                            Text(Fmt.remaining(current.stop, at), style = ZType.Small, color = Z.Muted)
                         }
+                    }
+                    if (timeShift.available) {
+                        Spacer(Modifier.height(10.dp))
+                        TimeShiftBar(timeShift)
                     }
                     if (next != null) {
                         Spacer(Modifier.height(10.dp))
@@ -113,7 +126,10 @@ fun LiveBanner(vm: AppViewModel, channel: Channel?, visible: Boolean, now: Long,
                 Column(horizontalAlignment = Alignment.End) {
                     Clock()
                     Spacer(Modifier.height(16.dp))
-                    Text("OK chaînes   ▶ infos   CH+ CH− zapper", style = ZType.Small, color = Z.Faint)
+                    Text(
+                        if (timeShift.live) "OK chaînes   ▲ infos   ◀ ▶ reculer, avancer" else "▼ revenir au direct   ◀ ▶ reculer, avancer",
+                        style = ZType.Small, color = Z.Faint,
+                    )
                 }
             }
         }
@@ -228,4 +244,47 @@ fun NumberBox(typed: String, match: Channel?, modifier: Modifier) {
             Text(match.label, style = ZType.Label, color = Z.Muted)
         }
     }
+}
+
+private fun delayText(t: TimeShift): String =
+    (if (t.paused) "En pause" else "Différé") + if (t.delayMs > 0) "  −" + Fmt.clock(t.delayMs) else ""
+
+/** The recording window of the channel, with the live point at the right end. */
+@Composable
+private fun TimeShiftBar(t: TimeShift) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("−" + Fmt.clock(t.windowMs), style = ZType.Small, color = Z.Faint)
+        Spacer(Modifier.width(10.dp))
+        ProgressLine(
+            1f - t.delayMs.toFloat() / t.windowMs, Modifier.width(420.dp), color = if (t.live) Z.Live else Z.Gold, height = 3.dp,
+        )
+        Spacer(Modifier.width(10.dp))
+        Text("direct", style = ZType.Small, color = Z.Faint)
+    }
+}
+
+/** Shown while the picture is not live: the user must always know it. */
+@Composable
+fun DelayedPill(t: TimeShift, modifier: Modifier) {
+    Row(
+        modifier.padding(top = 32.dp, end = Z.Gutter).clip(RoundedCornerShape(12.dp)).background(Color(0xE6101217))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(Z.Gold))
+        Spacer(Modifier.width(10.dp))
+        Text(delayText(t), style = ZType.Label, color = Color.White)
+        Spacer(Modifier.width(14.dp))
+        Text("▼ direct", style = ZType.Small, color = Z.Muted)
+    }
+}
+
+/** "−30 s" in the middle of the screen after a jump. */
+@Composable
+fun SeekFlash(text: String, modifier: Modifier) {
+    Text(
+        text, style = ZType.Headline, color = Color.White,
+        modifier = modifier.clip(RoundedCornerShape(16.dp)).background(Color(0x99000000))
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+    )
 }

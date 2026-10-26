@@ -144,6 +144,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         store.introSeen = true
         introShown = false
         restoreFocus = true
+        // First start: without their account, TF1, M6… do not play
+        if (!store.accountsOffered) {
+            store.accountsOffered = true
+            messages.ask(
+                Choice(
+                    "TF1, M6 et quelques autres chaînes demandent un compte gratuit. Le renseigner maintenant ?",
+                    listOf("Renseigner mes comptes", "Plus tard"),
+                ) { if (it == 0) openAccounts() }
+            )
+        }
+    }
+
+    /** Settings page the settings screen must open on (read once). */
+    var settingsTarget: SettingsTarget? = null
+
+    enum class SettingsTarget { Accounts }
+
+    /** Settings → Comptes (the add-on's page with the logins). */
+    fun openAccounts() {
+        stack.clear()
+        settingsTarget = SettingsTarget.Accounts
+        selectTab(Tab.Settings)
     }
 
     private suspend fun reloadAddonContent() {

@@ -58,6 +58,11 @@ class Store(context: Context) {
         get() = prefs.getInt("mini_hints", 0)
         set(value) = prefs.edit().putInt("mini_hints", value).apply()
 
+    /** The first start already offered to enter the TF1+ / M6+… accounts. */
+    var accountsOffered: Boolean
+        get() = prefs.getBoolean("accounts_offered", false)
+        set(value) = prefs.edit().putBoolean("accounts_offered", value).apply()
+
     /** Developer mode: the test builds of the dev branch are offered as updates. */
     var developerMode: Boolean
         get() = prefs.getBoolean("developer_mode", false)

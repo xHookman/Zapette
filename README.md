@@ -40,6 +40,10 @@ Téléchargez et envoyez le fichier `.apk` de la [dernière version](https://git
 | 1 … 9 | Aller à une chaîne |
 | 0 | Revenir à la chaîne précédente |
 | OK | Infos sur le programme, puis liste des chaînes |
+| ◀ / ▶ | Reculer / avancer dans le direct (maintenir pour aller plus vite) |
+| Lecture/Pause | Mettre le direct en pause |
+| ▼ | Revenir au direct |
+| ▲ | Fiche du programme |
 | Retour | Quitter le plein écran (la chaîne continue dans un coin) |
 | OK deux fois | Revenir en plein écran sur cette chaîne |
 | OK maintenu | Options d'une vidéo (favoris…) |

@@ -32,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,7 @@ import fr.zapette.tv.ui.components.FocusSurface
 import fr.zapette.tv.ui.components.Spinner
 import fr.zapette.tv.ui.theme.Z
 import fr.zapette.tv.ui.theme.ZType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** One line of the settings list: a section title or a setting. */
@@ -77,9 +80,21 @@ fun SettingsScreen(vm: AppViewModel) {
     var localRevision by remember { mutableIntStateOf(0) }
     val countries by vm.live.countries.collectAsState()
 
+    val selectedPage = remember { FocusRequester() }
+
     LaunchedEffect(addonRevision) {
         schema = runCatching { vm.engine.settingsSchema() }.getOrElse { emptyList() }
         vm.updates.refreshAddonInfo()
+        // Opened from the first-start invitation: straight to the accounts
+        if (vm.settingsTarget == AppViewModel.SettingsTarget.Accounts) {
+            vm.settingsTarget = null
+            val accountsPage = schema.orEmpty().indexOfFirst { accountsOf(it.entries).isNotEmpty() }
+            if (accountsPage >= 0) {
+                page = accountsPage + 1
+                delay(100)   // let the page tab appear
+                runCatching { selectedPage.requestFocus() }
+            }
+        }
     }
     LaunchedEffect(Unit) { vm.backdrop = null }
 
@@ -272,7 +287,10 @@ fun SettingsScreen(vm: AppViewModel) {
             Spacer(Modifier.height(18.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
                 itemsIndexed(pages) { index, label ->
-                    PageTab(label, selected = page == index) { page = index }
+                    PageTab(
+                        label, selected = page == index,
+                        modifier = if (page == index) Modifier.focusRequester(selectedPage) else Modifier,
+                    ) { page = index }
                 }
                 if (schema == null) item { Spinner(Modifier.padding(16.dp), size = 22.dp) }
             }
@@ -315,10 +333,10 @@ private class RepeatedPresses(private val needed: Int) {
 
 /** Entry of the left column; resting on it shows its page. */
 @Composable
-private fun PageTab(label: String, selected: Boolean, onSelect: () -> Unit) {
+private fun PageTab(label: String, selected: Boolean, modifier: Modifier = Modifier, onSelect: () -> Unit) {
     FocusSurface(
         onClick = onSelect, onFocus = onSelect,
-        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), focusedScale = 1.03f,
+        modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), focusedScale = 1.03f,
         container = if (selected) Z.Surface2 else Color.Transparent,
         focusedContainer = Color.White, ring = false,
     ) { focused ->
