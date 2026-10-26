@@ -3,8 +3,9 @@ name: Build APK
 # Two branches:
 #   main  every push publishes the next version (v1.0, v1.1…) as a GitHub
 #         Release. Zapette checks these releases to update itself.
-#   dev   tests: the APK is only kept as a build artifact (7 days),
-#         nothing is published and the installed apps are not told.
+#   dev   tests: the APK replaces the single pre-release "test". Only an app
+#         in developer mode (5 presses on the version, in the settings)
+#         is offered it; everybody else only sees the versions.
 #
 # Releases are signed with the private Zapette key, kept in GitHub secrets:
 #   ZAPETTE_KEYSTORE_B64, ZAPETTE_KEYSTORE_PASSWORD, ZAPETTE_KEY_ALIAS, ZAPETTE_KEY_PASSWORD
@@ -116,14 +117,18 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "dist/zapette-$ZAPETTE_VERSION.apk"
           ls -la dist
 
-      - name: Keep the test APK (dev branch)
-        if: github.ref != 'refs/heads/main'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: zapette-${{ env.ZAPETTE_VERSION }}
-          path: dist/*.apk
-          retention-days: 7
+      # ------------------------------------------------------ dev: test build
+      - name: Replace the test build
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/dev' && steps.key.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete test --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
+          gh release create test dist/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --latest=false --title "Version de test" \
+            --notes "Version en cours de test, proposée uniquement aux applications en mode développeur. Préférez la dernière version publiée."
 
+      # ------------------------------------------------------ main: version
       # A tag left behind by a deleted release would point to old code
       - name: Free the version tag
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.key.outputs.signed == 'true'

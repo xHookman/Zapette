@@ -58,6 +58,11 @@ class Store(context: Context) {
         get() = prefs.getInt("mini_hints", 0)
         set(value) = prefs.edit().putInt("mini_hints", value).apply()
 
+    /** Developer mode: the test builds of the dev branch are offered as updates. */
+    var developerMode: Boolean
+        get() = prefs.getBoolean("developer_mode", false)
+        set(value) = prefs.edit().putBoolean("developer_mode", value).apply()
+
     /** Light mode for weak TVs: auto | on | off (applied at next start). */
     var perfMode: String
         get() = prefs.getString("perf_mode", "auto") ?: "auto"

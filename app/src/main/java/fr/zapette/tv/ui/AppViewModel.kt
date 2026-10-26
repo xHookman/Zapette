@@ -44,7 +44,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val live = LiveTv(app, engine, store, viewModelScope)
     val playback = LivePlayback(app, engine, store, live, viewModelScope) { subtitlesOn }
     val updates = Updates(
-        app, engine, messages, viewModelScope,
+        app, store, engine, messages, viewModelScope,
         onAddonChanged = ::reloadAddonContent,
         onCacheCleared = { live.reloadGuide() },
     )

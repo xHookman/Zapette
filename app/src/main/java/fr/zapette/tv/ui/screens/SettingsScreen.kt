@@ -1,5 +1,6 @@
 package fr.zapette.tv.ui.screens
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -125,6 +126,20 @@ fun SettingsScreen(vm: AppViewModel) {
         })
     }
 
+    // As with Android's build number: pressing the version 5 times turns on the developer mode
+    val versionTaps = remember { RepeatedPresses(needed = 5) }
+    fun tapVersion() {
+        if (vm.store.developerMode) return
+        when (val left = versionTaps.press()) {
+            0 -> {
+                vm.store.developerMode = true
+                localRevision++
+                vm.messages.toast("Mode développeur activé", "« Mettre à jour Zapette » propose aussi les versions de test.")
+            }
+            in 1..3 -> vm.messages.toast("Mode développeur dans $left appui" + if (left > 1) "s" else "")
+        }
+    }
+
     fun zapetteLines(): List<Line> {
         val store = vm.store
         fun option(label: String, on: Boolean, description: String, flip: () -> Unit) =
@@ -210,8 +225,16 @@ fun SettingsScreen(vm: AppViewModel) {
             Line.Item("Revoir les touches à connaître", description = "Mini-lecteur, zapping, options.") { vm.showIntro() },
             Line.Item("Zapette ${BuildConfig.VERSION_NAME}",
                 description = "Interface TV pour Catch-up TV & More. Les contenus sont fournis par les chaînes ; " +
-                    "certains nécessitent un compte (TF1+, M6+…) à renseigner dans « Comptes ».") {},
+                    "certains nécessitent un compte (TF1+, M6+…) à renseigner dans « Comptes ».") { tapVersion() },
         )
+        if (store.developerMode) lines += Line.Item(
+            "Mode développeur", toggle = true,
+            description = "« Mettre à jour Zapette » propose aussi les versions de test. Désactivez pour revenir aux seules versions publiées.",
+        ) {
+            store.developerMode = false
+            localRevision++
+            vm.messages.toast("Mode développeur désactivé")
+        }
         return lines
     }
 
@@ -270,6 +293,23 @@ fun SettingsScreen(vm: AppViewModel) {
                 }
             }
         }
+    }
+}
+
+/** Counts quick presses on the same item (a pause of 3 s starts again). */
+private class RepeatedPresses(private val needed: Int) {
+    private var count = 0
+    private var last = 0L
+
+    /** Presses still needed; 0 when reached (and the count starts again). */
+    fun press(): Int {
+        val now = SystemClock.elapsedRealtime()
+        if (now - last > 3_000) count = 0
+        last = now
+        count++
+        val left = needed - count
+        if (left <= 0) count = 0
+        return left.coerceAtLeast(0)
     }
 }
 

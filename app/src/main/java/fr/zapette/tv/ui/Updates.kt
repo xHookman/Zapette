@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import fr.zapette.tv.BuildConfig
+import fr.zapette.tv.data.Store
 import fr.zapette.tv.engine.AddonEngine
 import fr.zapette.tv.engine.AppUpdater
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
  */
 class Updates(
     context: Context,
+    private val store: Store,
     private val engine: AddonEngine,
     private val messages: Messages,
     private val scope: CoroutineScope,
@@ -23,7 +25,7 @@ class Updates(
     private val onAddonChanged: suspend () -> Unit,
     private val onCacheCleared: () -> Unit,
 ) {
-    private val updater = AppUpdater(context)
+    private val updater = AppUpdater(context) { store.developerMode }
 
     // ------------------------------------------------------------------- Zapette
     /** Latest Zapette release found on GitHub (null until checked). */

@@ -25,10 +25,11 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Updates Zapette itself from the GitHub Releases published by the CI
- * (one release per build, tag "v1.<build number>", one APK per processor type).
+ * Updates Zapette itself from the GitHub Releases published by the CI:
+ * the versions ("v1.4", one APK each) and, in developer mode, the test build
+ * of the dev branch (pre-release "test", replaced at each test).
  */
-class AppUpdater(private val context: Context) {
+class AppUpdater(private val context: Context, private val withTestBuilds: () -> Boolean) {
 
     data class Release(
         val versionName: String,
@@ -40,28 +41,32 @@ class AppUpdater(private val context: Context) {
         val isNewer get() = newerThan(versionName, BuildConfig.VERSION_NAME)
     }
 
-    /** Latest published release, or null when GitHub can't be reached. */
+    /** Newest version available (or test build, in developer mode); null when GitHub can't be reached. */
     suspend fun latest(): Release? = withContext(Dispatchers.IO) {
-        runCatching {
-            val text = get("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest")
-            val json = Json.parseToJsonElement(text).jsonObject
-            val tag = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@runCatching null
-            val assets = (json["assets"] as? JsonArray).orEmpty().map { it.jsonObject }
-                .filter { it.str("name").endsWith(".apk") }
-            // One APK per release, for every device
-            val asset = assets.singleOrNull() ?: return@runCatching null
-            // Only APKs published in this app's own GitHub releases
-            val expected = "https://github.com/${BuildConfig.UPDATE_REPO}/releases/download/"
-            if (!asset.str("browser_download_url").startsWith(expected)) return@runCatching null
-            Release(
-                versionName = tag.removePrefix("v"),
-                apkUrl = asset.str("browser_download_url"),
-                apkName = asset.str("name"),
-                size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0,
-                notes = json["body"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            )
-        }.getOrNull()
+        val base = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases"
+        val found = listOfNotNull(
+            release("$base/latest"),
+            if (withTestBuilds()) release("$base/tags/$TEST_TAG") else null,
+        )
+        found.maxWithOrNull { a, b -> if (newerThan(a.versionName, b.versionName)) 1 else -1 }
     }
+
+    private fun release(url: String): Release? = runCatching {
+        val json = Json.parseToJsonElement(get(url)).jsonObject
+        // One APK per release, for every device: "zapette-1.4.apk", "zapette-1.5-test.31.apk"
+        val asset = (json["assets"] as? JsonArray).orEmpty().map { it.jsonObject }
+            .singleOrNull { it.str("name").endsWith(".apk") } ?: return@runCatching null
+        // Only APKs published in this app's own GitHub releases
+        val expected = "https://github.com/${BuildConfig.UPDATE_REPO}/releases/download/"
+        if (!asset.str("browser_download_url").startsWith(expected)) return@runCatching null
+        Release(
+            versionName = asset.str("name").removePrefix("zapette-").removeSuffix(".apk"),
+            apkUrl = asset.str("browser_download_url"),
+            apkName = asset.str("name"),
+            size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0,
+            notes = json["body"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        )
+    }.getOrNull()
 
     private fun JsonObject.str(key: String) = this[key]?.jsonPrimitive?.contentOrNull.orEmpty()
 
@@ -184,20 +189,35 @@ class AppUpdater(private val context: Context) {
     }
 
     private companion object {
+        /** Tag of the test build published by the dev branch. */
+        const val TEST_TAG = "test"
+
         /**
-         * "1.10" is newer than "1.9". A test build ("1.5-test.31") is replaced by any
-         * release; a local build ("dev") is never updated.
+         * Version order: "1.10" after "1.9"; a test build "1.5-test.31" prepares 1.5,
+         * so it comes after 1.4 and before 1.5; test builds follow their build number.
+         * A local build ("dev") is never updated.
          */
         fun newerThan(candidate: String, installed: String): Boolean {
             if (installed == "dev") return false
-            val a = candidate.split('.').map { it.toIntOrNull() ?: return false }
-            val b = installed.split('.').map { it.toIntOrNull() ?: return true }
-            for (i in 0 until maxOf(a.size, b.size)) {
-                val x = a.getOrElse(i) { 0 }
-                val y = b.getOrElse(i) { 0 }
+            val a = parse(candidate) ?: return false
+            val b = parse(installed) ?: return true
+            for (i in 0 until maxOf(a.first.size, b.first.size)) {
+                val x = a.first.getOrElse(i) { 0 }
+                val y = b.first.getOrElse(i) { 0 }
                 if (x != y) return x > y
             }
-            return false
+            // Same version: the release comes after its test builds
+            val testA = a.second ?: Int.MAX_VALUE
+            val testB = b.second ?: Int.MAX_VALUE
+            return testA > testB
+        }
+
+        /** "1.5-test.31" → ([1, 5], 31); "1.4" → ([1, 4], null). */
+        private fun parse(name: String): Pair<List<Int>, Int?>? {
+            val version = name.substringBefore("-test.")
+            val numbers = version.split('.').map { it.toIntOrNull() ?: return null }
+            val test = if ("-test." in name) name.substringAfter("-test.").toIntOrNull() ?: return null else null
+            return numbers to test
         }
 
         const val MAX_APK_BYTES = 400L * 1024 * 1024
