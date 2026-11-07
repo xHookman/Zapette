@@ -46,8 +46,54 @@ def _patch_lmtv(module):
     module.get_live_url = Resolver.register(get_live_url)
 
 
+# ------------------------------------------------------------------------ RMC+
+def _patch_rmcplus(module):
+    """RMC+ login needs a "clientId" written in one of the scripts of rmcplus.fr.
+    The add-on has the script's address written in, but its name changes each
+    time the site is updated: then every RMC+ channel fails. The script is now
+    looked for in the site's home page when the known address no longer has it."""
+    import re
+    import urlquick
+
+    site = "https://www.rmcplus.fr"
+    marker = "getEffectiveAuthenticationClientId"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                             "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+               "Referer": site + "/"}
+    original = module.get_login_token
+    found = {}
+
+    def has_marker(url):
+        response = urlquick.get(url, headers=headers, max_age=86400, raise_for_status=False)
+        return response.status_code == 200 and marker in response.text
+
+    def client_id_script():
+        if "url" in found:
+            return found["url"]
+        url = module.URL_CLIENTID
+        try:
+            if not has_marker(url):
+                url = None
+                page = urlquick.get(site + "/", headers=headers, max_age=-1).text
+                for path in dict.fromkeys(re.findall(r'/_next/static/[^"\'\s]+?\.js', page)):
+                    if has_marker(site + path):
+                        url = site + path
+                        break
+        except Exception:
+            url = module.URL_CLIENTID
+        found["url"] = url or module.URL_CLIENTID
+        return found["url"]
+
+    def get_login_token(plugin):
+        module.URL_CLIENTID = client_id_script()
+        return original(plugin)
+
+    module.get_login_token = get_login_token
+
+
 PATCHES = {
     "resources.lib.channels.fr.lmtv": _patch_lmtv,
+    "resources.lib.channels.fr.rmcplus": _patch_rmcplus,
 }
 
 
