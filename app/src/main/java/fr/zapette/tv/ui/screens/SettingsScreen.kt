@@ -42,7 +42,6 @@ import androidx.tv.material3.Text
 import fr.zapette.tv.BuildConfig
 import fr.zapette.tv.Perf
 import fr.zapette.tv.data.SettingCategory
-import fr.zapette.tv.ui.theme.Look
 import fr.zapette.tv.data.SettingEntry
 import fr.zapette.tv.ui.AppViewModel
 import fr.zapette.tv.ui.Choice
@@ -189,17 +188,6 @@ fun SettingsScreen(vm: AppViewModel) {
                 description = "Bouquet utilisé pour l'accueil, la liste des chaînes et le guide TV.") {
                 if (countries.isNotEmpty()) vm.messages.ask(Choice("Chaînes en direct", countries.map { it.label },
                     countries.indexOfFirst { it.id == store.liveCountry }) { i -> vm.changeCountry(countries[i].id); localRevision++ })
-            },
-            Line.Item(
-                "Thème",
-                value = vm.look.label,
-                description = "Couleurs et style de l'application : moderne, Wii ou vieille télé. Le flou de l'accueil suit le thème.",
-            ) {
-                val looks = Look.values().toList()
-                vm.messages.ask(Choice("Thème", looks.map { it.label }, looks.indexOf(vm.look)) { i ->
-                    vm.changeLook(looks[i])
-                    localRevision++
-                })
             },
             Line.Item(
                 "Mode léger (TV peu puissante)",
