@@ -21,7 +21,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
@@ -47,6 +49,7 @@ import fr.zapette.tv.ui.screens.IntroScreen
 import fr.zapette.tv.ui.screens.SettingsScreen
 import fr.zapette.tv.ui.screens.SplashScreen
 import fr.zapette.tv.ui.theme.Z
+import fr.zapette.tv.ui.theme.ZapetteBlurSupported
 import fr.zapette.tv.ui.theme.ZapetteTheme
 
 class MainActivity : ComponentActivity() {
@@ -57,7 +60,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
-            ZapetteTheme {
+            ZapetteTheme(vm.look) {
                 Box(Modifier.fillMaxSize().background(Z.Bg)) {
                     when (val boot = vm.boot) {
                         // The first-start presentation replaces the screens until it is closed
@@ -176,8 +179,6 @@ private fun Tabs(vm: AppViewModel) {
     }
 }
 
-private val BackdropFadeH = Brush.horizontalGradient(0.25f to Z.Bg, 0.6f to Z.Bg.copy(alpha = 0.6f), 1f to Color.Transparent)
-private val BackdropFadeV = Brush.verticalGradient(0.35f to Color.Transparent, 0.75f to Z.Bg)
 
 /**
  * Ambient picture of the focused item on the right side of the screen, faded into
@@ -186,16 +187,22 @@ private val BackdropFadeV = Brush.verticalGradient(0.35f to Color.Transparent, 0
 @Composable
 private fun Backdrop(vm: AppViewModel) {
     val url = vm.backdrop
+    // Rebuilt with the look: the fades take its background colour
+    val look = vm.look
+    val fadeH = remember(look) { Brush.horizontalGradient(0.25f to Z.Bg, 0.6f to Z.Bg.copy(alpha = 0.6f), 1f to Color.Transparent) }
+    val fadeV = remember(look) { Brush.verticalGradient(0.35f to Color.Transparent, 0.75f to Z.Bg) }
     if (url == null || Perf.lite) return
     Box(
         Modifier.fillMaxSize().drawWithContent {
             drawContent()
-            drawRect(BackdropFadeH)
-            drawRect(BackdropFadeV)
+            drawRect(fadeH)
+            drawRect(fadeV)
         }
     ) {
         ZImage(
-            url, Modifier.fillMaxWidth(0.7f).fillMaxHeight(0.75f).align(Alignment.TopEnd),
+            url,
+            Modifier.fillMaxWidth(0.7f).fillMaxHeight(0.75f).align(Alignment.TopEnd)
+                .then(if (ZapetteBlurSupported) Modifier.blur(24.dp) else Modifier),
             contentScale = ContentScale.Crop, placeholder = Color.Transparent, alpha = 0.55f, widthPx = Images.CARD_PX,   // same bitmap as the focused card: no decoding
         )
     }

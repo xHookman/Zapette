@@ -18,6 +18,7 @@ import fr.zapette.tv.live.LivePlayback
 import fr.zapette.tv.live.LiveTv
 import fr.zapette.tv.ui.components.liveCardImage
 import fr.zapette.tv.ui.components.tonightCardImage
+import fr.zapette.tv.ui.theme.Look
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -61,6 +62,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var boot by mutableStateOf<Boot>(Boot.Loading("Démarrage du moteur…"))
         private set
+
+    /** The look chosen in the settings (colours, lettering, blur). */
+    var look by mutableStateOf(Look.fromId(store.look))
+        private set
+
+    fun changeLook(choice: Look) {
+        store.look = choice.id
+        look = choice
+    }
 
     init {
         start()

@@ -68,6 +68,11 @@ class Store(context: Context) {
         get() = prefs.getString("channel_order", "").orEmpty().split('\n').filter { it.isNotBlank() }
         set(value) = prefs.edit().putString("channel_order", value.joinToString("\n")).apply()
 
+    /** The look of the app: see [fr.zapette.tv.ui.theme.Look]. */
+    var look: String
+        get() = prefs.getString("look", "modern") ?: "modern"
+        set(value) = prefs.edit().putString("look", value).apply()
+
     /** Developer mode: the test builds of the dev branch are offered as updates. */
     var developerMode: Boolean
         get() = prefs.getBoolean("developer_mode", false)

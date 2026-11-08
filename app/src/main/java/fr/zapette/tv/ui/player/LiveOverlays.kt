@@ -92,9 +92,9 @@ fun LiveBanner(
                 Spacer(Modifier.width(22.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${c.number}", style = ZType.Number, color = Z.Text)
+                        Text("${c.number}", style = ZType.Number, color = Z.OnVideo)
                         Spacer(Modifier.width(8.dp))
-                        Text(c.label, style = ZType.Label, color = Z.Muted)
+                        Text(c.label, style = ZType.Label, color = Z.OnVideoMuted)
                         Spacer(Modifier.width(10.dp))
                         if (timeShift.live) LiveBadge() else Pill(delayText(timeShift), color = Z.Gold, textColor = Color.Black)
                         if (vm.subtitlesOn) {
@@ -111,19 +111,19 @@ fun LiveBanner(
                     if (current != null) {
                         val meta = listOf(current.subtitle, current.prettyCategory, Fmt.range(current.start, current.stop))
                             .filter { it.isNotBlank() }.joinToString("  ·  ")
-                        Text(meta, style = ZType.Label, color = Z.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(meta, style = ZType.Label, color = Z.OnVideoMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             ProgressLine(current.progress(at), Modifier.weight(1f, fill = false).widthIn(max = 420.dp))
                             Spacer(Modifier.width(12.dp))
-                            Text(Fmt.remaining(current.stop, at), style = ZType.Small, color = Z.Muted)
+                            Text(Fmt.remaining(current.stop, at), style = ZType.Small, color = Z.OnVideoMuted)
                         }
                     }
                     if (next != null) {
                         Spacer(Modifier.height(10.dp))
                         Row {
                             Text("À suivre  ", style = ZType.Small, color = Z.Live)
-                            SingleLine("${Fmt.time(next.start)}  ${next.title}", ZType.Small, Z.Text)
+                            SingleLine("${Fmt.time(next.start)}  ${next.title}", ZType.Small, Z.OnVideo)
                         }
                     }
                 }
@@ -136,7 +136,7 @@ fun LiveBanner(
                         timeShift.live -> listOf("▲ ▼ zapper", "OK chaînes", "Menu : sous-titres, audio")
                         else -> listOf("▶ revenir au direct", "◀ ▶ reculer, avancer", "Lecture/Pause : reprendre")
                     }
-                    hints.forEach { Text(it, style = ZType.Small, color = Z.Faint, maxLines = 1) }
+                    hints.forEach { Text(it, style = ZType.Small, color = Z.OnVideoMuted, maxLines = 1) }
                 }
             }
         }
@@ -155,18 +155,18 @@ fun ProgrammeSheet(vm: AppViewModel, channel: Channel, now: Long) {
                 Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)), widthPx = 800,
             )
             Spacer(Modifier.height(16.dp))
-            Text(current.title, style = ZType.Title, color = Z.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(current.title, style = ZType.Title, color = Z.OnVideo, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val meta = listOf(current.prettyCategory, current.episode, current.rating, Fmt.range(current.start, current.stop))
                 .filter { it.isNotBlank() }.joinToString(" · ")
-            Text(meta, style = ZType.Small, color = Z.Muted)
+            Text(meta, style = ZType.Small, color = Z.OnVideoMuted)
             Spacer(Modifier.height(10.dp))
             Text(
-                current.desc.ifBlank { "Pas de résumé." }, style = ZType.Body.copy(fontSize = 14.sp), color = Z.Muted,
+                current.desc.ifBlank { "Pas de résumé." }, style = ZType.Body.copy(fontSize = 14.sp), color = Z.OnVideoMuted,
                 maxLines = 7, overflow = TextOverflow.Ellipsis,
             )
         } else {
-            Text(channel.label, style = ZType.Title, color = Z.Text)
-            Text("Programme non communiqué", style = ZType.Body, color = Z.Muted)
+            Text(channel.label, style = ZType.Title, color = Z.OnVideo)
+            Text("Programme non communiqué", style = ZType.Body, color = Z.OnVideoMuted)
         }
         if (upcoming.isNotEmpty()) {
             Spacer(Modifier.height(18.dp))
@@ -174,13 +174,13 @@ fun ProgrammeSheet(vm: AppViewModel, channel: Channel, now: Long) {
             Spacer(Modifier.height(6.dp))
             upcoming.forEach { p ->
                 Row(Modifier.padding(vertical = 4.dp)) {
-                    Text(Fmt.time(p.start), style = ZType.Number.copy(fontSize = 14.sp), color = Z.Text, modifier = Modifier.width(56.dp))
-                    SingleLine(p.title, ZType.Body.copy(fontSize = 14.sp), Z.Muted)
+                    Text(Fmt.time(p.start), style = ZType.Number.copy(fontSize = 14.sp), color = Z.OnVideo, modifier = Modifier.width(56.dp))
+                    SingleLine(p.title, ZType.Body.copy(fontSize = 14.sp), Z.OnVideoMuted)
                 }
             }
         }
         Spacer(Modifier.weight(1f))
-        Text("OK : audio et sous-titres", style = ZType.Small, color = Z.Faint)
+        Text("OK : audio et sous-titres", style = ZType.Small, color = Z.OnVideoMuted)
     }
 }
 
@@ -192,7 +192,7 @@ fun ChannelList(vm: AppViewModel, channels: List<Channel>, tunedId: String?, now
     val focus = remember { FocusRequester() }
     Column(Modifier.width(470.dp).fillMaxHeight().background(Color(0xF00B0C10))) {
         Row(Modifier.padding(start = 28.dp, end = 28.dp, top = 28.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Chaînes", style = ZType.Title, color = Z.Text)
+            Text("Chaînes", style = ZType.Title, color = Z.OnVideo)
             Spacer(Modifier.weight(1f))
             Clock()
         }
@@ -208,16 +208,16 @@ fun ChannelList(vm: AppViewModel, channels: List<Channel>, tunedId: String?, now
                     onClick = { onPick(c) },
                     modifier = Modifier.fillMaxWidth().then(if (c.id == channels.getOrNull(start)?.id) Modifier.focusRequester(focus) else Modifier),
                     shape = RoundedCornerShape(12.dp), focusedScale = 1.02f,
-                    container = if (tuned) Z.LiveSoft else Color.Transparent, focusedContainer = Z.Surface3,
+                    container = if (tuned) Z.LiveSoft else Color.Transparent, focusedContainer = Z.OnVideoSurface,
                 ) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${c.number}", style = ZType.Number, color = if (tuned) Z.Live else Z.Faint, modifier = Modifier.width(34.dp))
+                        Text("${c.number}", style = ZType.Number, color = if (tuned) Z.Live else Z.OnVideoMuted, modifier = Modifier.width(34.dp))
                         ChannelLogo(c.logo, size = 44.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            SingleLine(programme?.title ?: c.label, ZType.Label, Z.Text)
+                            SingleLine(programme?.title ?: c.label, ZType.Label, Z.OnVideo)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                SingleLine(c.label, ZType.Small, Z.Muted, Modifier.weight(1f, fill = false))
+                                SingleLine(c.label, ZType.Small, Z.OnVideoMuted, Modifier.weight(1f, fill = false))
                                 if (programme != null) {
                                     Spacer(Modifier.width(8.dp))
                                     ProgressLine(programme.progress(now), Modifier.width(70.dp), height = 3.dp)
@@ -248,7 +248,7 @@ fun NumberBox(typed: String, match: Channel?, modifier: Modifier) {
             Spacer(Modifier.width(16.dp))
             ChannelLogo(match.logo, size = 48.dp)
             Spacer(Modifier.width(10.dp))
-            Text(match.label, style = ZType.Label, color = Z.Muted)
+            Text(match.label, style = ZType.Label, color = Z.OnVideoMuted)
         }
     }
 }
@@ -268,7 +268,7 @@ fun DelayedPill(t: TimeShift, modifier: Modifier) {
         Spacer(Modifier.width(10.dp))
         Text(delayText(t), style = ZType.Label, color = Color.White)
         Spacer(Modifier.width(14.dp))
-        Text("▶ direct", style = ZType.Small, color = Z.Muted)
+        Text("▶ direct", style = ZType.Small, color = Z.OnVideoMuted)
     }
 }
 
