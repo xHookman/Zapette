@@ -71,9 +71,6 @@ fun LiveBanner(
     visible: Boolean,
     now: Long,
     timeShift: TimeShift,
-    /** Buttons under the programme (subtitles…), reached with ▼; [selectedAction] is the one focused. */
-    actions: List<String>,
-    selectedAction: Int?,
     modifier: Modifier,
 ) {
     AnimatedVisibility(
@@ -122,12 +119,6 @@ fun LiveBanner(
                             Text(Fmt.remaining(current.stop, at), style = ZType.Small, color = Z.Muted)
                         }
                     }
-                    if (actions.isNotEmpty()) {
-                        Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            actions.forEachIndexed { i, label -> BannerButton(label, focused = i == selectedAction) }
-                        }
-                    }
                     if (next != null) {
                         Spacer(Modifier.height(10.dp))
                         Row {
@@ -142,9 +133,8 @@ fun LiveBanner(
                     Clock()
                     Spacer(Modifier.height(16.dp))
                     val hints = when {
-                        selectedAction != null -> listOf("◀ ▶ choisir", "OK valider", "▲ fermer")
-                        timeShift.live -> listOf("▼ sous-titres, audio", "OK chaînes", "◀ ▶ reculer, avancer")
-                        else -> listOf("▼ revenir au direct", "◀ ▶ reculer, avancer")
+                        timeShift.live -> listOf("▲ ▼ zapper", "OK chaînes", "Menu : sous-titres, audio")
+                        else -> listOf("▶ revenir au direct", "◀ ▶ reculer, avancer", "Lecture/Pause : reprendre")
                     }
                     hints.forEach { Text(it, style = ZType.Small, color = Z.Faint, maxLines = 1) }
                 }
@@ -278,7 +268,7 @@ fun DelayedPill(t: TimeShift, modifier: Modifier) {
         Spacer(Modifier.width(10.dp))
         Text(delayText(t), style = ZType.Label, color = Color.White)
         Spacer(Modifier.width(14.dp))
-        Text("▼ ▼ direct", style = ZType.Small, color = Z.Muted)
+        Text("▶ direct", style = ZType.Small, color = Z.Muted)
     }
 }
 
@@ -293,11 +283,4 @@ fun SeekFlash(text: String, modifier: Modifier) {
 }
 
 /** A button of the banner. The live screen handles the keys itself: this only draws it. */
-@Composable
-private fun BannerButton(label: String, focused: Boolean) {
-    Text(
-        label, style = ZType.Label, color = if (focused) Color.Black else Z.Text, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(if (focused) Color.White else Color(0x33FFFFFF))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}
+

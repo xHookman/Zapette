@@ -35,10 +35,11 @@ import fr.zapette.tv.ui.theme.ZType
 
 /** Keys that can't be guessed, in the order they are used. */
 private val Tips = listOf(
-    "CH+  CH−" to "Zapper",
+    "▲  ▼" to "Zapper (chaîne suivante, précédente)",
     "◀  ▶" to "En direct : reculer ou avancer dans le temps",
     "1 … 9" to "Aller à une chaîne  ·  0 : chaîne précédente",
     "OK maintenu" to "En direct : fiche du programme  ·  ailleurs : options",
+    "Menu" to "Sous-titres, audio",
 )
 
 /**
