@@ -321,8 +321,13 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
 
         val buttons = bannerButtons()
         val hints = when {
-            onButtons -> listOf("◀ ▶ choisir", "OK valider", "▲ barre de progression")
-            else -> listOf("◀ ▶ reculer, avancer", if (scrubTo != null) "OK aller là" else "OK chaînes", "▼ boutons")
+            onButtons -> listOf("◀ ▶ choisir", "OK valider", "▲ barre de progression", "Retour : fermer le bandeau")
+            else -> listOf(
+                "◀ ▶ reculer, avancer",
+                if (scrubTo != null) "OK aller là" else "OK chaînes",
+                "▼ boutons",
+                if (scrubTo != null) "Retour : annuler le saut" else "Retour : fermer le bandeau",
+            )
         }
         LiveBanner(
             vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift,
