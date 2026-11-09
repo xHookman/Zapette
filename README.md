@@ -36,17 +36,21 @@ Téléchargez et envoyez le fichier `.apk` de la [dernière version](https://git
 
 | Touche | Effet |
 |---|---|
-| ▲ / ▼ (ou CH+ / CH−) | Chaîne suivante / précédente |
+| ◀ / ▶ (ou ▲ / ▼, selon le réglage) | Chaîne suivante / précédente |
+| ▲ / ▼ (ou ◀ / ▶) | Ouvrir le bandeau. Avec le bandeau ouvert : ▼ va à ses boutons, ▲ revient à la barre |
+| ◀ / ▶ dans le bandeau | Déplacer la barre de progression pour reculer ou avancer. OK y va |
+| OK | Dans le bandeau : aller à la position de la barre, ou valider un bouton. Sinon : bandeau, puis liste des chaînes |
+| OK maintenu | En direct : fiche du programme · dans les menus : options d'une vidéo (favoris…) |
+| CH+ / CH− | Chaîne suivante / précédente |
 | 1 … 9 | Aller à une chaîne |
 | 0 | Revenir à la chaîne précédente |
-| OK | Infos sur le programme, puis liste des chaînes |
-| OK maintenu | En direct : fiche du programme · dans les menus : options d'une vidéo (favoris…) |
-| ◀ / ▶ | Reculer / avancer dans le direct (maintenir pour aller plus vite). Avancer jusqu'au bout revient au direct |
 | Lecture/Pause | Mettre le direct en pause, ou reprendre |
 | Menu | Audio et sous-titres |
 | Touche sous-titres | Activer ou couper les sous-titres |
-| Retour | Quitter le plein écran (la chaîne continue dans un coin) |
+| Retour | Fermer le bandeau, ou quitter le plein écran (la chaîne continue dans un coin) |
 | OK deux fois | Revenir en plein écran sur cette chaîne |
+
+Le réglage **Réglages → Touches de zapping** choisit la paire de flèches qui change de chaîne : ◀ ▶ (télécommande Google TV Streamer) ou ▲ ▼ (télécommande classique).
 
 ## Si une chaîne ne marche plus
 
