@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,13 +71,6 @@ fun LiveBanner(
     visible: Boolean,
     now: Long,
     timeShift: TimeShift,
-    /** The focus inside the banner: its buttons, or the progress bar when false. */
-    onButtons: Boolean,
-    buttonIndex: Int,
-    buttons: List<String>,
-    /** Where OK would take the picture, while the bar is being moved (null: nothing pending). */
-    scrubTo: Long?,
-    hints: List<String>,
     modifier: Modifier,
 ) {
     AnimatedVisibility(
@@ -134,20 +126,16 @@ fun LiveBanner(
                             SingleLine("${Fmt.time(next.start)}  ${next.title}", ZType.Small, Z.Text)
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
-                    TimeBar(timeShift, scrubTo, focused = !onButtons, modifier = Modifier.widthIn(max = 520.dp))
-                    if (buttons.isNotEmpty()) {
-                        Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            buttons.forEachIndexed { i, label -> BannerButton(label, focused = onButtons && i == buttonIndex) }
-                        }
-                    }
                 }
                 Spacer(Modifier.width(24.dp))
                 // A fixed width: a long hint used to squeeze the programme column (broken layout)
                 Column(Modifier.width(HintsWidth), horizontalAlignment = Alignment.End) {
                     Clock()
                     Spacer(Modifier.height(16.dp))
+                    val hints = when {
+                        timeShift.live -> listOf("▲ ▼ zapper", "OK chaînes", "Menu : sous-titres, audio")
+                        else -> listOf("▶ revenir au direct", "◀ ▶ reculer, avancer", "Lecture/Pause : reprendre")
+                    }
                     hints.forEach { Text(it, style = ZType.Small, color = Z.Faint, maxLines = 1) }
                 }
             }
@@ -296,46 +284,3 @@ fun SeekFlash(text: String, modifier: Modifier) {
 
 /** A button of the banner. The live screen handles the keys itself: this only draws it. */
 
-
-/**
- * The picture's place in the recording, drawn like the bar of a video player: the left end is
- * the start of the recording, the right end is live. [scrubTo] is where OK would take it.
- */
-@Composable
-fun TimeBar(timeShift: TimeShift, scrubTo: Long?, focused: Boolean, modifier: Modifier) {
-    val window = timeShift.windowMs
-    if (window <= 0) {
-        Text("Pas de retour en arrière sur cette chaîne", style = ZType.Small, color = Z.OnVideoMuted, modifier = modifier)
-        return
-    }
-    val at = scrubTo ?: timeShift.delayMs
-    // 0 = the start of the recording, 1 = live
-    val position = (1f - at.toFloat() / window).coerceIn(0f, 1f)
-    val label = when {
-        scrubTo != null -> "OK pour aller là  ·  " + delayText(TimeShift(delayMs = at, windowMs = window, paused = timeShift.paused))
-        at == 0L && !timeShift.paused -> "Direct"
-        else -> delayText(TimeShift(delayMs = at, windowMs = window, paused = timeShift.paused))
-    }
-    Column(modifier) {
-        Row(
-            Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(Color(0x40FFFFFF))
-                .border(if (focused) 2.dp else 0.dp, if (focused) Z.Focus else Color.Transparent, RoundedCornerShape(6.dp)),
-        ) {
-            Box(Modifier.weight(maxOf(position, 0.001f)).fillMaxHeight().background(Color(0xCCFFFFFF)))
-            Box(Modifier.width(if (scrubTo != null) 8.dp else 5.dp).fillMaxHeight().background(Z.Live))
-            Box(Modifier.weight(maxOf(1f - position, 0.001f)).fillMaxHeight())
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(label, style = ZType.Small, color = Z.OnVideoMuted, maxLines = 1)
-    }
-}
-
-/** A button of the banner: light when it has the focus. */
-@Composable
-fun BannerButton(label: String, focused: Boolean) {
-    Text(
-        label, style = ZType.Label, color = if (focused) Color.Black else Color.White, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(if (focused) Color.White else Color(0x33FFFFFF))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}

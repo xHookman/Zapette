@@ -190,20 +190,6 @@ fun SettingsScreen(vm: AppViewModel) {
                     countries.indexOfFirst { it.id == store.liveCountry }) { i -> vm.changeCountry(countries[i].id); localRevision++ })
             },
             Line.Item(
-                "Touches de zapping",
-                value = if (store.zapKeys == "vertical") "▲ ▼ zappent" else "◀ ▶ zappent",
-                description = "Les flèches qui changent de chaîne. L'autre paire ouvre le bandeau : ▼ va à ses boutons, " +
-                    "◀ ▶ déplacent sa barre de progression pour reculer ou avancer.",
-            ) {
-                val modes = listOf("horizontal", "vertical")
-                vm.messages.ask(Choice("Touches de zapping",
-                    listOf("◀ ▶ zappent (Google TV Streamer)", "▲ ▼ zappent (télécommande classique)"),
-                    modes.indexOf(store.zapKeys)) { i ->
-                    store.zapKeys = modes[i]
-                    localRevision++
-                })
-            },
-            Line.Item(
                 "Mode léger (TV peu puissante)",
                 value = when (store.perfMode) {
                     "on" -> "Toujours"

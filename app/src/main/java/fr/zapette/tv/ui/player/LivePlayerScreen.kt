@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,11 +39,10 @@ import kotlinx.coroutines.launch
  * Full-screen live TV: the overlays and the remote control.
  * The video itself is drawn by [LiveVideoLayer]; tuning is done by LivePlayback.
  *
- * Remote: the zapping arrows (◀ ▶ or ▲ ▼, see the setting) change channel · the other pair, or
- * OK, opens the banner · with the banner open: ◀ ▶ move its progress bar (OK goes there),
- * ▼ goes to its buttons (subtitles, audio, restart) · digits = channel number (0 = previous)
- * · OK held or Info = programme sheet · Play/Pause · Guide = channel list
- * · Menu = audio and subtitles · Subtitles key = subtitles · Back = leave.
+ * Remote: ▲ ▼ (or CH+/CH−) zap · digits = channel number (0 = previous)
+ * · OK = banner (what is on), then channel list · OK held or Info = programme sheet
+ * · ◀ ▶ go back / forward in time (hold to go faster; forward to the end = live) · Play/Pause
+ * · Guide = channel list · Menu = audio and subtitles · Subtitles key = subtitles · Back = leave.
  */
 @Composable
 fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
@@ -67,11 +65,6 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     var okHeld by remember { mutableStateOf(false) }
     var seekFlash by remember { mutableStateOf<String?>(null) }
     var flashTimer by remember { mutableStateOf<Job?>(null) }
-    // The banner's focus: its progress bar (◀ ▶ move it) or its buttons (▼ goes there)
-    var onButtons by remember { mutableStateOf(false) }
-    var buttonIndex by remember { mutableIntStateOf(0) }
-    // Where OK would take the picture, while the bar is being moved (null: nothing pending)
-    var scrubTo by remember { mutableStateOf<Long?>(null) }
 
     fun showBanner() {
         banner = true
@@ -80,8 +73,6 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             delay(5_000)
             if (!channelList && !programmeSheet) {
                 banner = false
-                scrubTo = null
-                onButtons = false
             }
         }
     }
@@ -132,11 +123,6 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         when {
             playback.error != null -> playback.retry()
             programmeSheet -> player?.let { openTrackMenu(vm, it) }
-            banner && onButtons -> {
-                bannerButtons().getOrNull(buttonIndex)?.second?.invoke()
-                showBanner()
-            }
-            banner && scrubTo != null -> applyScrub()
             banner -> channelList = true
             else -> showBanner()
         }
@@ -145,41 +131,6 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
     fun zap(step: Int) {
         programmeSheet = false
         playback.zap(step)
-        showBanner()
-    }
-
-    /** The banner's buttons: subtitles and audio, then restart the programme when it is not live. */
-    fun bannerButtons(): List<Pair<String, () -> Unit>> {
-        val player = playback.player ?: return emptyList()
-        val channel = live.channel(playback.channelId)
-        val programme = channel?.let { live.nowPlaying(it, now - timeShift.delayMs / 1000) }
-        return listOfNotNull(
-            (if (vm.subtitlesOn) "Sous-titres : activés" else "Sous-titres : désactivés") to { toggleSubtitles(vm, player) },
-            "Audio et langues" to { openTrackMenu(vm, player) },
-            if (programme != null && playback.canTimeShift) {
-                "Reprendre au début" to { playback.goBackTo(programme.start * 1000, programme.title) }
-            } else null,
-        )
-    }
-
-    /** Moves the bar: [delta] > 0 goes back in time, < 0 towards live. Applied by OK. */
-    fun moveBar(delta: Long) {
-        if (!playback.canTimeShift) {
-            vm.messages.toast("Pas de retour en arrière", "Cette chaîne ne permet pas de revenir dans le temps.")
-            return
-        }
-        val from = scrubTo ?: timeShift.delayMs
-        scrubTo = (from + delta).coerceIn(0L, timeShift.windowMs.coerceAtLeast(0L))
-    }
-
-    /** OK on the bar: the picture goes where the bar was moved to. */
-    fun applyScrub() {
-        val target = scrubTo ?: return
-        scrubTo = null
-        val current = playback.delayMs()
-        // seekBy: positive moves towards live, so the difference from the current delay
-        if (target != current) playback.seekBy(current - target)
-        readTimeShift()
         showBanner()
     }
 
@@ -206,16 +157,12 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         if (e.isBack()) {
             when {
                 numbers.cancel() -> Unit
-                scrubTo != null -> scrubTo = null
                 channelList -> {
                     channelList = false
                     runCatching { focus.requestFocus() }
                 }
                 programmeSheet -> programmeSheet = false
-                banner -> {
-                    banner = false
-                    onButtons = false
-                }
+                banner -> banner = false
                 else -> vm.onBack()
             }
             return true
@@ -233,9 +180,6 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             e.repeatCount > 0 -> 30_000L
             else -> 10_000L
         }
-        val horizontalZap = vm.store.zapKeys != "vertical"
-        val arrow = e.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || e.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-        val upDown = e.keyCode == KeyEvent.KEYCODE_DPAD_UP || e.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
         when {
             // OK is handled on release, to tell a press from a hold (see okPress)
             e.isOk() -> when {
@@ -245,30 +189,13 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                     toggleSheet()
                 }
             }
-            // Banner open: its arrows work on it, whichever pair zaps
-            banner && !programmeSheet && (arrow || upDown) -> {
-                when (e.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT ->
-                        if (onButtons) buttonIndex = (buttonIndex - 1).coerceAtLeast(0) else moveBar(step)
-                    KeyEvent.KEYCODE_DPAD_RIGHT ->
-                        if (onButtons) buttonIndex = (buttonIndex + 1).coerceAtMost((bannerButtons().size - 1).coerceAtLeast(0))
-                        else moveBar(-step)
-                    KeyEvent.KEYCODE_DPAD_UP -> onButtons = false
-                    KeyEvent.KEYCODE_DPAD_DOWN -> if (!onButtons && bannerButtons().isNotEmpty()) {
-                        onButtons = true
-                        buttonIndex = 0
-                    }
-                }
-                showBanner()
-            }
             else -> when (e.keyCode) {
-                // The zapping pair changes channel (the other one opens the banner)
-                KeyEvent.KEYCODE_DPAD_LEFT -> if (horizontalZap) zap(-1) else showBanner()
-                KeyEvent.KEYCODE_DPAD_RIGHT -> if (horizontalZap) zap(+1) else showBanner()
-                KeyEvent.KEYCODE_DPAD_UP -> if (horizontalZap) showBanner() else zap(+1)
-                KeyEvent.KEYCODE_DPAD_DOWN -> if (horizontalZap) showBanner() else zap(-1)
-                KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> zap(+1)
-                KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> zap(-1)
+                // ▲ ▼ zap, as CH+ / CH−. The Google TV remote has only the arrows
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> zap(+1)
+                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> zap(-1)
+                // Time-shift, as in Kodi. Going forward to the end comes back to live
+                KeyEvent.KEYCODE_DPAD_LEFT -> seek(-step)
+                KeyEvent.KEYCODE_DPAD_RIGHT -> seek(step)
                 KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-30_000)
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(30_000)
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> {
@@ -319,15 +246,8 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
             playback.loading -> LoadingOverlay(shown)
         }
 
-        val buttons = bannerButtons()
-        val hints = when {
-            onButtons -> listOf("◀ ▶ choisir", "OK valider", "▲ barre de progression")
-            else -> listOf("◀ ▶ reculer, avancer", if (scrubTo != null) "OK aller là" else "OK chaînes", "▼ boutons")
-        }
         LiveBanner(
             vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift,
-            onButtons = onButtons, buttonIndex = buttonIndex, buttons = buttons.map { it.first },
-            scrubTo = scrubTo, hints = hints,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 

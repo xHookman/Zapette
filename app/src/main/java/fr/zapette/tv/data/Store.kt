@@ -78,11 +78,6 @@ class Store(context: Context) {
         get() = prefs.getString("perf_mode", "auto") ?: "auto"
         set(value) = prefs.edit().putString("perf_mode", value).apply()
 
-    /** Which arrows zap: "horizontal" (◀ ▶, the Google TV remote) or "vertical" (▲ ▼). */
-    var zapKeys: String
-        get() = prefs.getString("zap_keys", "horizontal") ?: "horizontal"
-        set(value) = prefs.edit().putString("zap_keys", value).apply()
-
     // ------------------------------------------------------------- resume
     private val _resume = MutableStateFlow(loadResume())
     val resume: StateFlow<List<ResumeEntry>> = _resume.asStateFlow()
