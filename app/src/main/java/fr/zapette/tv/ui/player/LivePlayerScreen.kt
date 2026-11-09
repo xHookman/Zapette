@@ -126,28 +126,6 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         }
     }
 
-    /** OK released: a short press shows the banner, then the channel list. */
-    fun okPress() {
-        val player = playback.player
-        when {
-            playback.error != null -> playback.retry()
-            programmeSheet -> player?.let { openTrackMenu(vm, it) }
-            banner && onButtons -> {
-                bannerButtons().getOrNull(buttonIndex)?.second?.invoke()
-                showBanner()
-            }
-            banner && scrubTo != null -> applyScrub()
-            banner -> channelList = true
-            else -> showBanner()
-        }
-    }
-
-    fun zap(step: Int) {
-        programmeSheet = false
-        playback.zap(step)
-        showBanner()
-    }
-
     /** The banner's buttons: subtitles and audio, then restart the programme when it is not live. */
     fun bannerButtons(): List<Pair<String, () -> Unit>> {
         val player = playback.player ?: return emptyList()
@@ -180,6 +158,28 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
         // seekBy: positive moves towards live, so the difference from the current delay
         if (target != current) playback.seekBy(current - target)
         readTimeShift()
+        showBanner()
+    }
+
+    /** OK released: a short press shows the banner, then the channel list. */
+    fun okPress() {
+        val player = playback.player
+        when {
+            playback.error != null -> playback.retry()
+            programmeSheet -> player?.let { openTrackMenu(vm, it) }
+            banner && onButtons -> {
+                bannerButtons().getOrNull(buttonIndex)?.second?.invoke()
+                showBanner()
+            }
+            banner && scrubTo != null -> applyScrub()
+            banner -> channelList = true
+            else -> showBanner()
+        }
+    }
+
+    fun zap(step: Int) {
+        programmeSheet = false
+        playback.zap(step)
         showBanner()
     }
 

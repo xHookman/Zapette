@@ -305,7 +305,7 @@ fun SeekFlash(text: String, modifier: Modifier) {
 fun TimeBar(timeShift: TimeShift, scrubTo: Long?, focused: Boolean, modifier: Modifier) {
     val window = timeShift.windowMs
     if (window <= 0) {
-        Text("Pas de retour en arrière sur cette chaîne", style = ZType.Small, color = Z.OnVideoMuted, modifier = modifier)
+        Text("Pas de retour en arrière sur cette chaîne", style = ZType.Small, color = Z.Muted, modifier = modifier)
         return
     }
     val at = scrubTo ?: timeShift.delayMs
@@ -326,7 +326,7 @@ fun TimeBar(timeShift: TimeShift, scrubTo: Long?, focused: Boolean, modifier: Mo
             Box(Modifier.weight(maxOf(1f - position, 0.001f)).fillMaxHeight())
         }
         Spacer(Modifier.height(6.dp))
-        Text(label, style = ZType.Small, color = Z.OnVideoMuted, maxLines = 1)
+        Text(label, style = ZType.Small, color = Z.Muted, maxLines = 1)
     }
 }
 
