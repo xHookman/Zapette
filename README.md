@@ -37,6 +37,7 @@ Téléchargez et envoyez le fichier `.apk` de la [dernière version](https://git
 | Touche | Effet |
 |---|---|
 | ▲ / ▼ (ou CH+ / CH−) | Chaîne suivante / précédente |
+| ▼ dans le bandeau | Aller à ses boutons : sous-titres, audio et langues, reprendre au début. ▲ revient |
 | 1 … 9 | Aller à une chaîne |
 | 0 | Revenir à la chaîne précédente |
 | OK | Infos sur le programme, puis liste des chaînes |
