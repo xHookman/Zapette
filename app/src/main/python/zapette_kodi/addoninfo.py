@@ -172,6 +172,47 @@ def _settings_file(addon_id):
     return os.path.join(runtime.addon_profile(addon_id), "settings.json")
 
 
+# Passwords and tokens never stay in clear in settings.json: the Android side keeps them encrypted.
+_SECRET_WORDS = ("password", "passwd", "token")
+# Used only when the encrypted store is unavailable: the value then lasts for this session.
+_session_secrets = {}
+
+
+def _is_secret(key):
+    return any(word in key.lower() for word in _SECRET_WORDS)
+
+
+def _secret_name(addon_id, key):
+    return "%s/%s" % (addon_id, key)
+
+
+def _read_secret(addon_id, key):
+    name = _secret_name(addon_id, key)
+    if name in _session_secrets:
+        return _session_secrets[name]
+    return runtime.call_host("getSecret", name) or ""
+
+
+def _write_secret(addon_id, key, value):
+    """Stores a secret; True when it was kept encrypted, False when only for this session."""
+    name = _secret_name(addon_id, key)
+    if runtime.call_host("setSecret", name, value) is True:
+        _session_secrets.pop(name, None)
+        return True
+    _session_secrets[name] = value
+    return False
+
+
+def _save(addon_id, values):
+    folder = runtime.addon_profile(addon_id)
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+    tmp = _settings_file(addon_id) + ".tmp"
+    with io.open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(values, ensure_ascii=False, indent=1))
+    os.replace(tmp, _settings_file(addon_id))
+
+
 def load_settings(addon_id):
     if addon_id not in _settings_cache:
         values = {}
@@ -180,11 +221,20 @@ def load_settings(addon_id):
                 values = json.load(f)
         except (IOError, OSError, ValueError):
             pass
+        # A password still in clear from an older version moves to the encrypted store
+        moved = [key for key in values if _is_secret(key) and values[key]
+                 and _write_secret(addon_id, key, values[key])]
+        for key in moved:
+            del values[key]
+        if moved:
+            _save(addon_id, values)
         _settings_cache[addon_id] = values
     return _settings_cache[addon_id]
 
 
 def get_setting(addon_id, key):
+    if _is_secret(key):
+        return _read_secret(addon_id, key)
     values = load_settings(addon_id)
     if key in values:
         return values[key]
@@ -194,15 +244,14 @@ def get_setting(addon_id, key):
 def set_setting(addon_id, key, value):
     if isinstance(value, bool):
         value = "true" if value else "false"
+    value = "%s" % value
     values = load_settings(addon_id)
-    values[key] = "%s" % value
-    folder = runtime.addon_profile(addon_id)
-    if not os.path.isdir(folder):
-        os.makedirs(folder)
-    tmp = _settings_file(addon_id) + ".tmp"
-    with io.open(tmp, "w", encoding="utf-8") as f:
-        f.write(json.dumps(values, ensure_ascii=False, indent=1))
-    os.replace(tmp, _settings_file(addon_id))
+    if _is_secret(key):
+        _write_secret(addon_id, key, value)
+        values.pop(key, None)
+    else:
+        values[key] = value
+    _save(addon_id, values)
 
 
 def reset_caches():

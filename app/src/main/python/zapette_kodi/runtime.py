@@ -93,6 +93,12 @@ class ConsoleHost(object):
     def progress(self, action, heading, message, percent):
         return False  # never cancelled
 
+    def getSecret(self, name):
+        return None
+
+    def setSecret(self, name, value):
+        return False  # no encrypted store here: the caller keeps the value for the session
+
     def log(self, level, message):
         if level >= 2:
             print("[kodi:%d] %s" % (level, message))

@@ -19,7 +19,7 @@ import kotlinx.serialization.builtins.ListSerializer
  *
  * Method names and signatures must match what the Python side calls.
  */
-class PythonHost {
+class PythonHost(private val secrets: SecretStore) {
 
     sealed interface Request {
         val heading: String
@@ -111,6 +111,12 @@ class PythonHost {
             .joinToString(" · ").ifBlank { "Chargement…" }
         return false
     }
+
+    /** Passwords of the accounts, kept encrypted (see [SecretStore]). */
+    fun getSecret(name: String): String = secrets.get(name)
+
+    /** False when the value could not be stored: the add-on then keeps it for this session only. */
+    fun setSecret(name: String, value: String): Boolean = runCatching { secrets.put(name, value) }.isSuccess
 
     fun log(level: Int, message: String) {
         when {

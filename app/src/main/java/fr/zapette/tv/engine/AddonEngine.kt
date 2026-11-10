@@ -34,7 +34,7 @@ import java.util.concurrent.Executors
  */
 class AddonEngine(private val context: Context) {
 
-    val host = PythonHost()
+    val host = PythonHost(SecretStore(context))
     val installer = AddonInstaller(context)
 
     private val addonThread = Executors.newSingleThreadExecutor { Thread(it, "catchup-addon") }.asCoroutineDispatcher()
