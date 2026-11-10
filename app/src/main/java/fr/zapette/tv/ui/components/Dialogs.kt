@@ -149,7 +149,8 @@ fun SelectDialog(
     DialogFrame(onDismiss, title) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.heightIn(max = 460.dp),
+            // Short enough for the buttons under the list to stay on screen
+            modifier = Modifier.heightIn(max = if (multi) 300.dp else 460.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             itemsIndexed(options) { index, option ->

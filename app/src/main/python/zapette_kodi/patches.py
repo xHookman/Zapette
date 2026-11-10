@@ -46,8 +46,27 @@ def _patch_lmtv(module):
     module.get_live_url = Resolver.register(get_live_url)
 
 
+def _patch_resolver_proxy(module):
+    """Dailymotion can answer without its list of qualities. The add-on then shows its error
+    message and crashes with KeyError 'qualities': it only has to stop cleanly."""
+    original = module.get_stream_dailymotion
+
+    def get_stream_dailymotion(plugin, *args, **kwargs):
+        try:
+            return original(plugin, *args, **kwargs)
+        except KeyError as e:
+            if e.args != ("qualities",):
+                raise
+            plugin.notify("ERROR", plugin.localize(30716))
+            return None
+
+    get_stream_dailymotion.__module__ = module.__name__
+    module.get_stream_dailymotion = get_stream_dailymotion
+
+
 PATCHES = {
     "resources.lib.channels.fr.lmtv": _patch_lmtv,
+    "resources.lib.resolver_proxy": _patch_resolver_proxy,
 }
 
 
