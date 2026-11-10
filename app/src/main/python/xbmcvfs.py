@@ -30,7 +30,9 @@ def translatePath(path):
         "recordings": runtime.temp_dir(),
     }
     base = roots.get(name, runtime.HOME_DIR)
-    return os.path.join(base, *[p for p in tail.split("/") if p]) + ("/" if path.endswith("/") and tail else "")
+    # ".." is dropped: a special:// path can never climb out of its root
+    parts = [p for p in tail.split("/") if p not in ("", ".", "..")]
+    return os.path.join(base, *parts) + ("/" if path.endswith("/") and tail else "")
 
 
 def makeLegalFilename(path):

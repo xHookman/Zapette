@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Some TV channels still stream over plain http: allowed for them only -->
+    <!-- Plain http is allowed everywhere: some channels still stream without https. -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />

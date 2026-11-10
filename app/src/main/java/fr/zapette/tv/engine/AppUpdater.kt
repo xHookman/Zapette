@@ -81,8 +81,7 @@ class AppUpdater(private val context: Context, private val withTestBuilds: () ->
                 if (code in 300..399) {
                     val location = conn.getHeaderField("Location") ?: error("Redirection invalide")
                     url = URL(URL(url), location).toString()
-                    // Never leave HTTPS (GitHub serves release files from its own CDN)
-                    if (!url.startsWith("https://")) error("Redirection non sécurisée refusée")
+                    if (!isGitHubHttps(url)) error("Redirection vers un site inconnu refusée")
                     return@repeat
                 }
                 if (code != 200) error("Téléchargement impossible (HTTP $code)")
@@ -222,4 +221,12 @@ class AppUpdater(private val context: Context, private val withTestBuilds: () ->
 
         const val MAX_APK_BYTES = 400L * 1024 * 1024
     }
+}
+
+/** Release files come from GitHub or its download CDN, over HTTPS only. */
+private fun isGitHubHttps(url: String): Boolean {
+    val parsed = runCatching { URL(url) }.getOrNull() ?: return false
+    val host = parsed.host
+    return parsed.protocol == "https" &&
+        (host == "github.com" || host == "api.github.com" || host.endsWith(".githubusercontent.com"))
 }
