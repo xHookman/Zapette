@@ -138,8 +138,18 @@ def _invoke(url, depth):
 
 
 def error_text(exception, session):
-    """A short French message for the user (secrets masked)."""
-    return runtime.redact(_error_text(exception, session))
+    """A short French message for the user, with the code to report it (secrets masked)."""
+    text = runtime.redact(_error_text(exception, session))
+    if exception is None or not text:
+        return text
+    return "%s  [%s]" % (text, error_code(exception))
+
+
+def error_code(exception):
+    """The exception and where it was raised, in a few words: what to copy when reporting."""
+    frames = traceback.extract_tb(exception.__traceback__)
+    where = " %s:%d" % (os.path.basename(frames[-1].filename), frames[-1].lineno) if frames else ""
+    return runtime.redact("%s%s" % (exception.__class__.__name__, where))
 
 
 def _error_text(exception, session):

@@ -57,7 +57,7 @@ def _patch_resolver_proxy(module):
         except KeyError as e:
             if e.args != ("qualities",):
                 raise
-            plugin.notify("ERROR", plugin.localize(30716))
+            plugin.notify("ERROR", "%s  [Dailymotion, qualités]" % plugin.localize(30716))
             return None
 
     get_stream_dailymotion.__module__ = module.__name__
