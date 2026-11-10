@@ -143,7 +143,8 @@ fun LiveBanner(
                     Spacer(Modifier.height(16.dp))
                     val hints = when {
                         selectedAction != null -> listOf("◀ ▶ choisir", "OK valider", "▲ fermer")
-                        else -> listOf("▼ sous-titres, audio", "OK chaînes", "◀ ▶ reculer, avancer")
+                        timeShift.live -> listOf("▼ sous-titres, audio", "OK chaînes", "◀ ▶ reculer, avancer")
+                        else -> listOf("▼ revenir au direct", "◀ ▶ reculer, avancer")
                     }
                     hints.forEach { Text(it, style = ZType.Small, color = Z.Faint, maxLines = 1) }
                 }

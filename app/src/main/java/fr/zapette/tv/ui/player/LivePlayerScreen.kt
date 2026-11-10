@@ -40,10 +40,10 @@ import kotlinx.coroutines.launch
  * Full-screen live TV: the overlays and the remote control.
  * The video itself is drawn by [LiveVideoLayer]; tuning is done by LivePlayback.
  *
- * Remote: ▲ ▼ (or CH+/CH−) zap · digits = channel number (0 = previous)
- * · OK = banner (what is on), then channel list · OK held or Info = programme sheet
+ * Remote: CH+/CH− zap · digits = channel number (0 = previous) · ▲ ▼ = banner (what is on)
+ * · OK = banner, then channel list · OK held or Info = programme sheet
  * · ◀ ▶ go back / forward in time (hold to go faster) · Play/Pause
- * · ▼ with the banner shown = its buttons (subtitles, audio, restart); ▲ comes back
+ * · ▼ with the banner = back to live (time-shift) or the banner's buttons (subtitles, audio, restart)
  * · Guide = channel list · Subtitles / Menu = subtitles, audio · Back = leave.
  */
 @Composable
@@ -221,18 +221,10 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                 }
             }
             else -> when (e.keyCode) {
-                // ▲ ▼ zap, as CH+ / CH−. With the banner shown, ▼ goes to its buttons and ▲ comes back
-                KeyEvent.KEYCODE_DPAD_UP -> if (actionIndex != null) closeActions() else zap(+1)
-                KeyEvent.KEYCODE_DPAD_DOWN -> when {
-                    banner && !programmeSheet && actionIndex == null && bannerActions().isNotEmpty() -> {
-                        actionIndex = 0
-                        bannerTimer?.cancel()      // the banner stays while choosing
-                    }
-                    actionIndex == null -> zap(-1)
-                }
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> zap(+1)
                 KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> zap(-1)
-                // ◀ ▶ go back / forward in time, or move between the banner's buttons when they are focused
+                // Time-shift, as in Kodi. The arrows never zap (on purpose)
+                // In the banner's buttons, ◀ ▶ move between them
                 KeyEvent.KEYCODE_DPAD_LEFT -> actionIndex?.let { actionIndex = (it - 1).coerceAtLeast(0) } ?: seek(-step)
                 KeyEvent.KEYCODE_DPAD_RIGHT -> actionIndex?.let { actionIndex = (it + 1).coerceAtMost(bannerActions().lastIndex) } ?: seek(step)
                 KeyEvent.KEYCODE_MEDIA_REWIND -> seek(-30_000)
@@ -242,6 +234,28 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
                         readTimeShift()
                         showBanner()
                     }
+                }
+                // ▲ ▼: what is on. In time-shift, ▼ with the banner shown goes back to live
+                // ▲ ▼: what is on. With the banner shown, ▼ goes back to live (time-shift)
+                // or to the banner's buttons (subtitles, audio…)
+                KeyEvent.KEYCODE_DPAD_DOWN -> when {
+                    banner && !programmeSheet && !timeShift.live -> {
+                        playback.backToLive()
+                        readTimeShift()
+                        showBanner()
+                    }
+                    banner && !programmeSheet && actionIndex == null && bannerActions().isNotEmpty() -> {
+                        actionIndex = 0
+                        bannerTimer?.cancel()      // the banner stays while choosing
+                    }
+                    else -> {
+                        programmeSheet = false
+                        if (actionIndex == null) showBanner()
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    programmeSheet = false
+                    if (actionIndex != null) closeActions() else showBanner()
                 }
                 KeyEvent.KEYCODE_INFO -> toggleSheet()
                 KeyEvent.KEYCODE_GUIDE -> {
@@ -287,7 +301,7 @@ fun LivePlayerScreen(vm: AppViewModel, channelId: String) {
 
         LiveBanner(
             vm, shown, visible = banner && !programmeSheet, now = now, timeShift = timeShift,
-            actions = bannerActions().map { it.first },
+            actions = if (timeShift.live) bannerActions().map { it.first } else emptyList(),
             selectedAction = actionIndex,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
